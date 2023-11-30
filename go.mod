@@ -1,6 +1,6 @@
 module github.com/Uffe-Code/go-odata
 
-go 1.18
+go 1.20
 
 require (
 	github.com/Uffe-Code/go-nullable v0.1.2
