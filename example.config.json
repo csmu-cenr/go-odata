@@ -1,0 +1,33 @@
+{
+	"apiUrl": "https://services.odata.org/TripPinRESTierService/(S(c0y0kjlx4yjoxry4otnmoxf4))/",
+	"package": {
+		"createDirectoryIfMissing": true,
+		"directory": "dataModel/",
+		"models": "dataModel.go",
+		"results": "results.go"
+	},
+	"imports": {
+		"models": [
+			"time",
+			"github.com/Uffe-Code/go-nullable/nullable",
+			"github.com/Uffe-Code/go-odata/odataClient",
+			"github.com/Uffe-Code/go-odata/date"
+		],
+		"results": [
+			"encoding/json",
+			"net/url",
+			"github.com/Uffe-Code/go-odata/odataClient"
+		]
+	},
+	"fields": {
+		"pointers": false,
+		"json": {
+			"tags": true,
+			"omitempty": true
+		},
+		"extras": [
+			"ODataId  string  `json:\"@odata.id,omitempty\"`",
+			"ODataEditLink  string  `json:\"@odata.editLink,omitempty\"`"
+		]
+	}
+}
