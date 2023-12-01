@@ -4,7 +4,8 @@
 		"createDirectoryIfMissing": true,
 		"directory": "dataModel/",
 		"models": "dataModel.go",
-		"results": "results.go"
+		"results": "results.go",
+		"extras":["errors.go"]
 	},
 	"imports": {
 		"models": [
