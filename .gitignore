@@ -15,6 +15,8 @@ go-odata
 # Debug files
 __DEBUG*
 
+# The .DS_Store file is a file created by macOS Finder to store custom attributes of a folder. It stands for "Desktop Services Store." These files are hidden by default in macOS, and their primary purpose is to store metadata about the visual layout of a folder, such as the position of icons, view options, and custom background images.
+.DS_Store
 
 .idea
 
