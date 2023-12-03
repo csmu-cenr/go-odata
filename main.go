@@ -28,9 +28,9 @@ func main() {
 
 	err = generator.GenerateCode()
 	if err != nil {
-		fmt.Printf("error while generating code: %s", err.Error())
+		fmt.Printf("Error while generating code: %s\n", err.Error())
 		return
 	}
 
-	fmt.Printf("code generated successfully")
+	fmt.Printf("Code generated successfully\n")
 }

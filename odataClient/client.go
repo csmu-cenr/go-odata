@@ -14,15 +14,30 @@ type oDataClient struct {
 	defaultPageSize int
 }
 
+type ODataQueryOptions struct {
+	Select  string
+	Filter  string
+	Count   string
+	Top     string
+	Skip    string
+	OrderBy string
+	Format  string
+}
+
 // ODataClient represents a connection to the OData REST API
 type ODataClient interface {
 	Wrapper
 	AddHeader(key string, value string)
+	ODataQueryOptions() ODataQueryOptions
 }
 
 // Wrapper represents a wrapper around the OData client if you have build own code around the OData itself, for authentication etc
 type Wrapper interface {
 	ODataClient() ODataClient
+}
+
+func (client *oDataClient) ODataQueryOptions() ODataQueryOptions {
+	return ODataQueryOptions{}
 }
 
 func New(baseUrl string) ODataClient {
