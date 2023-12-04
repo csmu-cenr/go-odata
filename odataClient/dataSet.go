@@ -208,7 +208,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			if options.Count == "true" {
 				result.Count = responseData.Count
 			}
-			result.Model = dataSet.modelDefinition.Name()
+			result.Model = dataSet.modelDefinition.Url()
 			result.NextLink = responseData.NextLink
 			meta <- result
 			close(meta)
