@@ -22,6 +22,10 @@ type ODataQueryOptions struct {
 	Skip    string
 	OrderBy string
 	Format  string
+
+	ODataEditLink string
+	ODataId       string
+	ODataReadLink string
 }
 
 // ODataClient represents a connection to the OData REST API

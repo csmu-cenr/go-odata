@@ -33,33 +33,37 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 	}
 }
 
-func (queryOptions ODataQueryOptions) ApplyArguments(defaultFilter string, queryParams url.Values) ODataQueryOptions {
+func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParams url.Values) ODataQueryOptions {
 
-	queryOptions.Select = queryParams.Get("$select")
-	queryOptions.Count = queryParams.Get("$count")
-	queryOptions.Top = queryParams.Get("$top")
-	queryOptions.Skip = queryParams.Get("$skip")
-	queryOptions.OrderBy = queryParams.Get("$orderby")
+	options.Select = queryParams.Get("$select")
+	options.Count = queryParams.Get("$count")
+	options.Top = queryParams.Get("$top")
+	options.Skip = queryParams.Get("$skip")
+	options.OrderBy = queryParams.Get("$orderby")
+
+	options.ODataEditLink = queryParams.Get("$odataeditlink")
+	options.ODataId = queryParams.Get("$odataidlink")
+	options.ODataReadLink = queryParams.Get("$odatareadlink")
 
 	filterValue := queryParams.Get("$filter")
 	if defaultFilter == "" && filterValue != "" {
-		queryOptions.Filter = filterValue
+		options.Filter = filterValue
 	}
 	if defaultFilter != "" && filterValue == "" {
-		queryOptions.Filter = defaultFilter
+		options.Filter = defaultFilter
 	}
 	if defaultFilter != "" && filterValue != "" {
-		queryOptions.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
+		options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
 	}
 
 	formatValue := queryParams.Get(("$format"))
 	if formatValue == "" {
-		queryOptions.Format = "json"
+		options.Format = "json"
 	} else {
-		queryOptions.Format = formatValue
+		options.Format = formatValue
 	}
 
-	return queryOptions
+	return options
 }
 
 func (queryOptions ODataQueryOptions) toQueryString() string {
@@ -145,13 +149,6 @@ func selectFields(model interface{}, includeTags []string) {
 		options := strings.Split(tag, ",")
 		tag = options[0]
 
-		if tag == "@odata.editLink" {
-			continue
-		}
-		if tag == "@odata.id" {
-			continue
-		}
-
 		if tag != "" && !contains(includeTags, tag) {
 			// Set the field to nil
 			if field.Kind() == reflect.Ptr {
@@ -202,6 +199,15 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			var filters []string
 			if options.Select != "" {
 				filters = strings.Split(options.Select, ",")
+			}
+			if options.ODataEditLink == "true" {
+				filters = append(filters, "@odata.editLink")
+			}
+			if options.ODataId == "true" {
+				filters = append(filters, "@odata.id")
+			}
+			if options.ODataReadLink == "true" {
+				filters = append(filters, "@odata.readLink")
 			}
 			result := Result{}
 			result.Context = responseData.Context
