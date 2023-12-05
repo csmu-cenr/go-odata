@@ -42,7 +42,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 	options.OrderBy = queryParams.Get("$orderby")
 
 	options.ODataEditLink = queryParams.Get("$odataeditlink")
-	options.ODataId = queryParams.Get("$odataidlink")
+	options.ODataId = queryParams.Get("$odataid")
 	options.ODataReadLink = queryParams.Get("$odatareadlink")
 
 	filterValue := queryParams.Get("$filter")
@@ -66,28 +66,37 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 	return options
 }
 
-func (queryOptions ODataQueryOptions) toQueryString() string {
+func (options ODataQueryOptions) toQueryString() string {
 	queryStrings := url.Values{}
-	if queryOptions.Select != "" {
-		queryStrings.Add("$select", queryOptions.Select)
+	if options.Select != "" {
+		queryStrings.Add("$select", options.Select)
 	}
-	if queryOptions.Filter != "" {
-		queryStrings.Add("$filter", queryOptions.Filter)
+	if options.Filter != "" {
+		queryStrings.Add("$filter", options.Filter)
 	}
-	if queryOptions.Top != "" {
-		queryStrings.Add("$top", queryOptions.Top)
+	if options.Top != "" {
+		queryStrings.Add("$top", options.Top)
 	}
-	if queryOptions.Skip != "" {
-		queryStrings.Add("$skip", queryOptions.Skip)
+	if options.Skip != "" {
+		queryStrings.Add("$skip", options.Skip)
 	}
-	if queryOptions.Count != "" {
-		queryStrings.Add("$count", queryOptions.Count)
+	if options.Count != "" {
+		queryStrings.Add("$count", options.Count)
 	}
-	if queryOptions.OrderBy != "" {
-		queryStrings.Add("orderby", queryOptions.OrderBy)
+	if options.OrderBy != "" {
+		queryStrings.Add("orderby", options.OrderBy)
 	}
-	if queryOptions.Format != "" {
-		queryStrings.Add("$format", queryOptions.Format)
+	if options.Format != "" {
+		queryStrings.Add("$format", options.Format)
+	}
+	if options.ODataEditLink != "" {
+		queryStrings.Add("$odataeditlink", options.ODataEditLink)
+	}
+	if options.ODataId != "" {
+		queryStrings.Add("$odataid", options.ODataId)
+	}
+	if options.ODataReadLink != "" {
+		queryStrings.Add("$odatareadlink", options.ODataReadLink)
 	}
 	result := queryStrings.Encode()
 	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
