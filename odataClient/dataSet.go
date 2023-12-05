@@ -84,7 +84,7 @@ func (options ODataQueryOptions) toQueryString() string {
 		queryStrings.Add("$count", options.Count)
 	}
 	if options.OrderBy != "" {
-		queryStrings.Add("orderby", options.OrderBy)
+		queryStrings.Add("$orderby", options.OrderBy)
 	}
 	if options.Format != "" {
 		queryStrings.Add("$format", options.Format)
