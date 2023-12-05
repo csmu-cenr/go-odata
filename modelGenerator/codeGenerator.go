@@ -64,6 +64,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 	jsonSupport := ""
 	name := ""
 
+	for _, extra := range g.Fields.Extras {
+		structString += fmt.Sprintf("\n\t%s", extra)
+	}
+	structString += "\n"
+
 	for _, propertyKey := range propertyKeys {
 		prop := entityType.Properties[propertyKey]
 		name = prop.Name
@@ -200,7 +205,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 			names = append(names, name)
 		}
 		sort.Slice(names, func(i, j int) bool {
-			return strings.ToLower(names[i]) < strings.ToLower(names[j])
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
 		})
 
 		for _, name := range names {
