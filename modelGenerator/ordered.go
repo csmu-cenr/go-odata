@@ -34,8 +34,8 @@ func sortedCaseInsensitiveStringKeys[V any](m map[string]V) []string {
 
 	// A case insensitive sort
 	sort.Slice(keys, func(i, j int) bool {
-		left := strings.ToLower(keys[i])
-		right := strings.ToLower(keys[j])
+		left := strings.TrimLeft(strings.ToLower(keys[i]), "_")
+		right := strings.TrimLeft(strings.ToLower(keys[j]), "_")
 		return left < right
 	})
 
