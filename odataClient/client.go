@@ -2,6 +2,7 @@ package odataClient
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -12,6 +13,21 @@ type oDataClient struct {
 	headers         map[string]string
 	httpClient      *http.Client
 	defaultPageSize int
+}
+
+type oDataError struct {
+	ODataError struct {
+		Code    string      `json:"code"`
+		Message interface{} `json:"message"`
+	} `json:"error"`
+}
+
+func (e oDataError) Error() string {
+	bytes, err := json.MarshalIndent(e, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("Error: Code: %d Message: %+v", e.ODataError.Code, e.ODataError.Message)
+	}
+	return string(bytes)
 }
 
 type ODataQueryOptions struct {
@@ -92,5 +108,15 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		return responseData, err
 	}
 	err = json.Unmarshal(body, &responseData)
+	if err == nil {
+		modelError := oDataError{}
+		err = json.Unmarshal(body, &modelError)
+		if err != nil {
+			err = nil
+		}
+		if err == nil && modelError.ODataError.Code != "" {
+			err = modelError
+		}
+	}
 	return responseData, err
 }
