@@ -53,7 +53,8 @@ func publicAttribute(property string) string {
 
 func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 
-	structString := fmt.Sprintf("type %s struct {", entityType.Name)
+	publicName := publicAttribute(entityType.Name)
+	structString := fmt.Sprintf("type %s struct {", publicName)
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
 
 	pointer := ""
@@ -90,11 +91,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 
 func generateModelDefinition(set edmxEntitySet) string {
 	entityType := set.getEntityType()
-
+	publicName := publicAttribute(entityType.Name)
 	return fmt.Sprintf(`//goland:noinspection GoUnusedExportedFunction
 func New%sCollection(wrapper odataClient.Wrapper) odataClient.ODataModelCollection[%s] {
 	return modelDefinition[%s]{client: wrapper.ODataClient(), name: "%s", url: "%s"}
-}`, entityType.Name, entityType.Name, entityType.Name, entityType.Name, set.Name)
+}`, publicName, publicName, publicName, publicName, set.Name)
 }
 
 func generateEnumStruct(enum edmxEnumType) string {
@@ -172,7 +173,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	for _, resultPackage := range g.Imports.Results {
 		resultPackages += fmt.Sprintf("\t\"%s\"\n", resultPackage)
 	}
-	resultCode := fmt.Sprintf(`package %s
+	resultsAsBytes := fmt.Sprintf(`package %s
 
 	import (
 	%s
@@ -190,6 +191,8 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 		switch tableName {
 
 	`, packageName, resultPackages)
+
+	structResults := fmt.Sprintf("package %s\n\n", packageName)
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
@@ -212,11 +215,12 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 			set := schema.EntitySets[name]
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			resultCode += "\n" + generateResult(set) + "\n"
+			resultsAsBytes += "\n" + generateByteResults(set) + "\n"
+			structResults += "\n" + generateTypeResult(set, "odataClient") + "\n"
 		}
 	}
 
-	resultCode += `
+	resultsAsBytes += `
 	default:
 		return nil, nil
 	}
@@ -224,7 +228,8 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 }
 	`
 	code[g.Package.Models] = modelCode
-	code[g.Package.Results] = resultCode
+	code[g.Package.ByteResults] = resultsAsBytes
+	code[g.Package.StructResults] = structResults
 	packageLine := fmt.Sprintf("package %s", packageName)
 	for _, extra := range g.Package.Extras {
 		extraCode, err := addPackageNameToExtra(packageLine, extra)
@@ -236,10 +241,44 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	return code
 }
 
-func generateResult(set edmxEntitySet) string {
+func generateTypeResult(set edmxEntitySet, clientName string) string {
 
 	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	result := `func {{typeName}}Results(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{typeName}}, error) {
 
+		{{clientName}} := {{clientName}}.New(url)
+		for key, value := range headers {
+			{{clientName}}.AddHeader(key, value)
+		}
+		options := {{clientName}}.ODataQueryOptions()
+		options = options.ApplyArguments(defaultFilter, urlValues)
+	
+		collection := New{{typeName}}Collection(odataClient)
+		dataset := collection.DataSet()
+		meta, data, errs := dataset.List(options)
+	
+		models := []{{typeName}}{}
+		for err := range errs {
+			return nil, err
+		}
+		for _ = range meta {
+			for model := range data {
+				models = append(models, model)
+			}
+		}
+	
+		return models, nil
+	}`
+	result = strings.ReplaceAll(result, "{{typeName}}", publicName)
+	result = strings.ReplaceAll(result, "{{clientName}}", clientName)
+	return result
+}
+
+func generateByteResults(set edmxEntitySet) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
 	return fmt.Sprintf(`
 
 	case "%s":
@@ -260,6 +299,6 @@ func generateResult(set edmxEntitySet) string {
 			return body, nil
 		}
 
-	`, set.Name, entityType.Name)
+	`, set.Name, publicName)
 
 }
