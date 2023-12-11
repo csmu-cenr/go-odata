@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 )
 
@@ -18,8 +17,8 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Single(id string) (ModelT, error)
 	List(queryOptions ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT, selectKeys []string) (ModelT, error)
-	Update(id string, model ModelT) (ModelT, error)
+	Insert(model ModelT, selectFields []string) (ModelT, error)
+	Update(id string, model ModelT, selectFields []string) (ModelT, error)
 	Delete(id string) error
 
 	getCollectionUrl() string
@@ -148,27 +147,6 @@ func contains(slice []string, value string) bool {
 	return false
 }
 
-func SetNullableValid(model interface{}, value bool, excludeTags []string) {
-	valueOfModel := reflect.ValueOf(&model).Elem()
-	typeOfModel := valueOfModel.Type()
-
-	for i := 0; i < valueOfModel.NumField(); i++ {
-		field := valueOfModel.Field(i)
-		tag := strings.Split(typeOfModel.Field(i).Tag.Get("json"), ",")[0]
-		if contains(excludeTags, tag) {
-			continue
-		}
-		// Check if the field is of type nullable.Nullable[T]
-		if field.Type().Kind() == reflect.Struct && field.Type().Name() == "Nullable" {
-			// Get the Valid field of the Nullable
-			validField := field.FieldByName("Valid")
-			if validField.IsValid() && validField.CanSet() {
-				validField.SetBool(value)
-			}
-		}
-	}
-}
-
 // List data from the API
 func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
@@ -235,7 +213,8 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-func extract(jsonInput string, fields []string) ([]byte, error) {
+// Remove unwanted fields from a json object
+func Extract(jsonInput string, fields []string) ([]byte, error) {
 
 	var inputData map[string]interface{}
 	err := json.Unmarshal([]byte(jsonInput), &inputData)
@@ -264,7 +243,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []str
 	var result ModelT
 	jsonData, err := json.Marshal(model)
 	if len(selectFields) > 0 {
-		jsonData, err = extract(string(jsonData), selectFields)
+		jsonData, err = Extract(string(jsonData), selectFields)
 		if err != nil {
 			return result, err
 		}
@@ -282,7 +261,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []str
 }
 
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, selectFields []string) (ModelT, error) {
 	requestUrl := dataSet.getSingleUrl(id)
 	var result ModelT
 	jsonData, err := json.Marshal(model)
