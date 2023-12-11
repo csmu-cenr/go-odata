@@ -115,16 +115,14 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		}
 		return responseData, message
 	}
-	err = json.Unmarshal(body, &responseData)
-	if err == nil {
+	jsonErr := json.Unmarshal(body, &responseData)
+	if jsonErr != nil {
 		modelError := oDataError{}
 		err = json.Unmarshal(body, &modelError)
 		if err != nil {
-			err = nil
+			return responseData, jsonErr
 		}
-		if err == nil && modelError.ODataError.Code != "" {
-			err = modelError
-		}
+		return responseData, modelError
 	}
 	return responseData, err
 }
