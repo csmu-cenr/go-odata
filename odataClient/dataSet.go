@@ -262,13 +262,26 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []str
 
 // Update a model in the API
 func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, selectFields []string) (ModelT, error) {
-	requestUrl := dataSet.getSingleUrl(id)
+	requestUrl := ""
+	leftBracket := strings.Contains(id, "(")
+	rightBracket := strings.Contains(id, ")")
+	if !leftBracket && !rightBracket {
+		requestUrl = dataSet.getSingleUrl(id)
+	} else {
+		requestUrl = id
+	}
 	var result ModelT
 	jsonData, err := json.Marshal(model)
+	if len(selectFields) > 0 {
+		jsonData, err = Extract(string(jsonData), selectFields)
+		if err != nil {
+			return result, err
+		}
+	}
 	if err != nil {
 		return result, err
 	}
-	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(jsonData))
+	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(jsonData))
 	if err != nil {
 		return result, err
 	}
