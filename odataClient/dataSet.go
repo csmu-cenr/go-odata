@@ -18,7 +18,7 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Single(id string) (ModelT, error)
 	List(queryOptions ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT) (ModelT, error)
+	Insert(model ModelT, selectKeys []string) (ModelT, error)
 	Update(id string, model ModelT) (ModelT, error)
 	Delete(id string) error
 
@@ -148,28 +148,22 @@ func contains(slice []string, value string) bool {
 	return false
 }
 
-func selectFields(model interface{}, includeTags []string) {
-	valueOfModel := reflect.ValueOf(model).Elem()
+func SetNullableValid(model interface{}, value bool, excludeTags []string) {
+	valueOfModel := reflect.ValueOf(&model).Elem()
 	typeOfModel := valueOfModel.Type()
 
 	for i := 0; i < valueOfModel.NumField(); i++ {
 		field := valueOfModel.Field(i)
-		tag := typeOfModel.Field(i).Tag.Get("json")
-		options := strings.Split(tag, ",")
-		tag = options[0]
-
-		if tag != "" && !contains(includeTags, tag) {
-			// Set the field to nil
-			if field.Kind() == reflect.Ptr {
-				field.Set(reflect.Zero(field.Type()))
-			}
-		} else {
-			// Make sure the nil value is returned as null
-			// Check if the field is a pointer and is nil
-			if field.Kind() == reflect.Ptr && field.IsNil() {
-				// Allocate a new instance of the type and assign it to the field
-				newInstance := reflect.New(field.Type().Elem())
-				field.Set(newInstance)
+		tag := strings.Split(typeOfModel.Field(i).Tag.Get("json"), ",")[0]
+		if contains(excludeTags, tag) {
+			continue
+		}
+		// Check if the field is of type nullable.Nullable[T]
+		if field.Type().Kind() == reflect.Struct && field.Type().Name() == "Nullable" {
+			// Get the Valid field of the Nullable
+			validField := field.FieldByName("Valid")
+			if validField.IsValid() && validField.CanSet() {
+				validField.SetBool(value)
 			}
 		}
 	}
@@ -228,9 +222,6 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			meta <- result
 			close(meta)
 			for _, model := range responseData.Value {
-				if len(filters) > 0 {
-					selectFields(&model, filters)
-				}
 				models <- model
 			}
 			defer close(models)
@@ -244,11 +235,40 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
+func extract(jsonInput string, fields []string) ([]byte, error) {
+
+	var inputData map[string]interface{}
+	err := json.Unmarshal([]byte(jsonInput), &inputData)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	selectedData := make(map[string]interface{})
+	for _, key := range fields {
+		if value, ok := inputData[key]; ok {
+			selectedData[key] = value
+		}
+	}
+
+	selectedJSON, err := json.Marshal(selectedData)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return selectedJSON, err
+}
+
 // Insert a model to the API
-func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []string) (ModelT, error) {
 	requestUrl := dataSet.getCollectionUrl()
 	var result ModelT
 	jsonData, err := json.Marshal(model)
+	if len(selectFields) > 0 {
+		jsonData, err = extract(string(jsonData), selectFields)
+		if err != nil {
+			return result, err
+		}
+	}
 	if err != nil {
 		return result, err
 	}
