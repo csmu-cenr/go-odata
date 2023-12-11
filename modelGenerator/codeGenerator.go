@@ -78,7 +78,7 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			}
 			jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
 		}
-		structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, prop.goType(), jsonSupport)
+		structString += fmt.Sprintf("\n\t%s %s\t%s", name, prop.goType(), jsonSupport)
 	}
 
 	return structString + "\n}"
