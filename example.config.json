@@ -21,7 +21,6 @@
 		]
 	},
 	"fields": {
-		"pointers": false,
 		"json": {
 			"tags": true,
 			"omitempty": true

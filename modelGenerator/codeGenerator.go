@@ -57,11 +57,6 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 	structString := fmt.Sprintf("type %s struct {", publicName)
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
 
-	pointer := ""
-	if g.Fields.Pointers {
-		pointer = "*"
-	}
-
 	jsonSupport := ""
 	name := ""
 
