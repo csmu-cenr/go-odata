@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"path/filepath"
 
 	"github.com/Uffe-Code/go-odata/modelGenerator"
 )
@@ -15,13 +14,7 @@ func main() {
 	// Parse the command-line arguments
 	flag.Parse()
 
-	directoryPath, err := filepath.Abs(filepath.Dir(config))
-	if err != nil {
-		panic(err.Error())
-	}
-	basePath := filepath.Base(config)
-	configPath := filepath.Join(directoryPath, basePath)
-	generator, err := modelGenerator.New(configPath)
+	generator, err := modelGenerator.New(config)
 	if err != nil {
 		panic(err.Error())
 	}
