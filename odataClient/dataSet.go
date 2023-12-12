@@ -17,8 +17,8 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Single(id string) (ModelT, error)
 	List(queryOptions ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT, selectFields []string) (ModelT, error)
-	Update(id string, model ModelT, selectFields []string) (ModelT, error)
+	Insert(model ModelT, fields []string) (ModelT, error)
+	Update(id string, model ModelT, fields []string) (ModelT, error)
 	Delete(id string) error
 
 	getCollectionUrl() string
@@ -213,8 +213,8 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// Remove unwanted fields from a json object
-func Extract(jsonInput string, fields []string) ([]byte, error) {
+// Select fields from a json object
+func SelectFields(jsonInput string, fields []string) ([]byte, error) {
 
 	var inputData map[string]interface{}
 	err := json.Unmarshal([]byte(jsonInput), &inputData)
@@ -237,13 +237,51 @@ func Extract(jsonInput string, fields []string) ([]byte, error) {
 	return selectedJSON, err
 }
 
+// Makes a byte slice into an any slice
+func MakeBytesAny(bytes []byte) []any {
+	anySlice := make([]interface{}, len(bytes))
+	for i, v := range bytes {
+		anySlice[i] = v
+	}
+	return anySlice
+}
+
+// Select fields from a list of json objects
+func SelectFieldsList(jsonInput string, fields []string) ([]byte, error) {
+
+	var inputData []map[string]interface{}
+	err := json.Unmarshal([]byte(jsonInput), &inputData)
+	if err != nil {
+		return []byte{}, err
+
+	}
+
+	selectedData := make([]map[string]interface{}, len(inputData))
+	for i, item := range inputData {
+		selectedItem := make(map[string]interface{})
+		for _, key := range fields {
+			if value, ok := item[key]; ok {
+				selectedItem[key] = value
+			}
+		}
+		selectedData[i] = selectedItem
+	}
+
+	selectedList, err := json.Marshal(selectedData)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return selectedList, err
+}
+
 // Insert a model to the API
 func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []string) (ModelT, error) {
 	requestUrl := dataSet.getCollectionUrl()
 	var result ModelT
 	jsonData, err := json.Marshal(model)
 	if len(selectFields) > 0 {
-		jsonData, err = Extract(string(jsonData), selectFields)
+		jsonData, err = SelectFields(string(jsonData), selectFields)
 		if err != nil {
 			return result, err
 		}
@@ -273,7 +311,7 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, selectF
 	var result ModelT
 	jsonData, err := json.Marshal(model)
 	if len(selectFields) > 0 {
-		jsonData, err = Extract(string(jsonData), selectFields)
+		jsonData, err = SelectFields(string(jsonData), selectFields)
 		if err != nil {
 			return result, err
 		}

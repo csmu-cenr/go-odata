@@ -4,8 +4,9 @@
 		"createDirectoryIfMissing": true,
 		"directory": "dataModel/",
 		"models": "dataModel.go",
-		"results": "results.go",
-		"extras":["errors.go"]
+		"byteResults": "byteResults.go",
+		"structResults": "structResults.go",
+		"structDataSets": "structDataSets.go"
 	},
 	"imports": {
 		"models": [
@@ -21,13 +22,16 @@
 		]
 	},
 	"fields": {
+		"public": true,
+		"pointers": false,
 		"json": {
 			"tags": true,
 			"omitempty": true
 		},
 		"extras": [
 			"ODataId  string  `json:\"@odata.id,omitempty\"`",
-			"ODataEditLink  string  `json:\"@odata.editLink,omitempty\"`"
+			"ODataEditLink  string  `json:\"@odata.editLink,omitempty\"`",
+			"ODataReadLink  string  `json:\"@odata.readLink,omitempty\"`"
 		]
 	}
 }

@@ -17,6 +17,7 @@ type Generator struct {
 		Models                   string   `json:"models"`
 		ByteResults              string   `json:"byteResults`
 		StructResults            string   `json:"structResults`
+		StructDataSets           string   `json:"structDataSets"`
 	} `json:"package"`
 	Imports struct {
 		Models  []string `json:"models"`

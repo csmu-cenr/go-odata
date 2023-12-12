@@ -176,18 +176,36 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 	func Results(tableName string, defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]byte, error) {
 
-		odataClient := odataClient.New(url)
+		client := odataClient.New(url)
 		for key, value := range headers {
-			odataClient.AddHeader(key, value)
+			client.AddHeader(key, value)
 		}
-		queryOptions := odataClient.ODataQueryOptions()
-		queryOptions = queryOptions.ApplyArguments(defaultFilter, urlValues)
+		options := client.ODataQueryOptions()
+		options = options.ApplyArguments(defaultFilter, urlValues)
 	
 		switch tableName {
 
 	`, packageName, resultPackages)
 
-	structResults := fmt.Sprintf("package %s\n\n", packageName)
+	structDataSets := fmt.Sprintf(`
+package %s
+	
+import (
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+
+	`, packageName)
+
+	structResults := fmt.Sprintf(`
+package %s
+
+import (
+	"net/url"
+
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+
+`, packageName)
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
@@ -210,8 +228,9 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 			set := schema.EntitySets[name]
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			resultsAsBytes += "\n" + generateByteResults(set) + "\n"
-			structResults += "\n" + generateTypeResult(set, "odataClient") + "\n"
+			resultsAsBytes += "\n" + generateByteResults(set, "client", "options", "odataClient") + "\n"
+			structResults += "\n" + generateTypeResult(set, "client", "odataClient") + "\n"
+			structDataSets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 		}
 	}
 
@@ -225,6 +244,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	code[g.Package.Models] = modelCode
 	code[g.Package.ByteResults] = resultsAsBytes
 	code[g.Package.StructResults] = structResults
+	code[g.Package.StructDataSets] = structDataSets
 	packageLine := fmt.Sprintf("package %s", packageName)
 	for _, extra := range g.Package.Extras {
 		extraCode, err := addPackageNameToExtra(packageLine, extra)
@@ -236,24 +256,43 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	return code
 }
 
-func generateTypeResult(set edmxEntitySet, clientName string) string {
+func generateDataSet(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{typeName}}Results(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{typeName}}, error) {
-
-		{{clientName}} := {{clientName}}.New(url)
+	result := `func {{publicName}}DataSet(headers map[string]string, url string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[Session]] {
+		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
-			{{clientName}}.AddHeader(key, value)
+			{{client}}.AddHeader(key, value)
 		}
-		options := {{clientName}}.ODataQueryOptions()
+		collection := New{{publicName}}Collection({{client}})
+		dataset := collection.DataSet()
+		return dataset
+	}`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	return result
+}
+
+func generateTypeResult(set edmxEntitySet, client string, packageName string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	result := `func {{publicName}}Results(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+
+		{{client}} := {{packageName}}.New(url)
+		for key, value := range headers {
+			{{client}}.AddHeader(key, value)
+		}
+		options := {{client}}.ODataQueryOptions()
 		options = options.ApplyArguments(defaultFilter, urlValues)
 	
-		collection := New{{typeName}}Collection(odataClient)
+		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
 		meta, data, errs := dataset.List(options)
 	
-		models := []{{typeName}}{}
+		models := []{{publicName}}{}
 		for err := range errs {
 			return nil, err
 		}
@@ -265,27 +304,37 @@ func generateTypeResult(set edmxEntitySet, clientName string) string {
 	
 		return models, nil
 	}`
-	result = strings.ReplaceAll(result, "{{typeName}}", publicName)
-	result = strings.ReplaceAll(result, "{{clientName}}", clientName)
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	return result
 }
 
-func generateByteResults(set edmxEntitySet) string {
+func generateByteResults(set edmxEntitySet, client string, options string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	return fmt.Sprintf(`
+	result := `
 
-	case "%s":
-		collection := New%sCollection(odataClient)
+	case "{{databaseName}}":
+		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List(queryOptions)
+		meta, data, errs := dataset.List({{options}})
 		for err := range errs {
 			return nil, err
 		}
+		fields := strings.Split({{options}}.Select, ",")
 		for result := range meta {
 			for model := range data {
-				result.Value = append(result.Value, model)
+				if len(fields) > 0 {
+					modelJson, _ := json.Marshal(model)
+					modelText, _ := {{packageName}}.SelectFields(string(modelJson), fields)
+					var modelData map[string]interface{}
+					json.Unmarshal([]byte(modelText), &modelData)
+					result.Value = append(result.Value, modelData)
+				} else {
+					result.Value = append(result.Value, model)
+				}
 			}
 			if result.Value == nil {
 				result.Value = []any{}
@@ -294,6 +343,14 @@ func generateByteResults(set edmxEntitySet) string {
 			return body, nil
 		}
 
-	`, set.Name, publicName)
+`
+
+	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{options}}", options)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+
+	return result
 
 }
