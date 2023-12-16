@@ -39,6 +39,7 @@ type ODataQueryOptions struct {
 	OrderBy string
 	Format  string
 
+	Expand        string
 	ODataEditLink string
 	ODataId       string
 	ODataReadLink string
