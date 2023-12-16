@@ -40,6 +40,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 	options.Skip = queryParams.Get("$skip")
 	options.OrderBy = queryParams.Get("$orderby")
 
+	options.Expand = queryParams.Get("$expand")
 	options.ODataEditLink = queryParams.Get("$odataeditlink")
 	options.ODataId = queryParams.Get("$odataid")
 	options.ODataReadLink = queryParams.Get("$odatareadlink")
@@ -88,6 +89,9 @@ func (options ODataQueryOptions) toQueryString() string {
 	if options.Format != "" {
 		queryStrings.Add("$format", options.Format)
 	}
+	if options.Expand != "" {
+		queryStrings.Add("$expand", options.Expand)
+	}
 	if options.ODataEditLink != "" {
 		queryStrings.Add("$odataeditlink", options.ODataEditLink)
 	}
@@ -101,6 +105,10 @@ func (options ODataQueryOptions) toQueryString() string {
 	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
 	result = strings.ReplaceAll(result, "%24", "$") // sometimes %24 is not recognised as $ - make it explicitly $
 	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
+	result = strings.ReplaceAll(result, "%2F", "/") // %3D stops odata from seeing table identifiers swap back to slashes
+	result = strings.ReplaceAll(result, "%28", "(") // %28 can stop odata from seeing bracketed code swap back to (
+	result = strings.ReplaceAll(result, "%29", ")") // %29 can stop odata from seeing bracketed code swap back to )
+	result = strings.ReplaceAll(result, "%3D", "=") // %3D can stop odata from seeing equal signs swap back to =
 	return result
 }
 
