@@ -260,7 +260,7 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}DataSet(headers map[string]string, url string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[Session]] {
+	result := `func {{publicName}}DataSet(headers map[string]string, url string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[{{publicName}}]] {
 		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
