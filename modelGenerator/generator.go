@@ -15,8 +15,8 @@ type Generator struct {
 		Directory                string   `json:"directory"`
 		Extras                   []string `json:"extras"`
 		Models                   string   `json:"models"`
-		ByteResults              string   `json:"byteResults`
-		StructResults            string   `json:"structResults`
+		ByteResults              string   `json:"byteResults"`
+		StructResults            string   `json:"structResults"`
 		StructDataSets           string   `json:"structDataSets"`
 	} `json:"package"`
 	Imports struct {
