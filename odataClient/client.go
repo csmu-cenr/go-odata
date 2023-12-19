@@ -3,7 +3,7 @@ package odataClient
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -104,7 +104,7 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		return responseData, err
 	}
 	defer func() { _ = response.Body.Close() }()
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return responseData, err
 	}

@@ -15,8 +15,9 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 }
 
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
-	Single(id string) (ModelT, error)
-	List(queryOptions ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
+	Single(id string, options ODataQueryOptions) (ModelT, error)
+	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
+	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, fields []string) (ModelT, error)
 	Update(id string, model ModelT, fields []string) (ModelT, error)
 	Delete(id string) error
@@ -117,6 +118,11 @@ func (dataSet odataDataSet[ModelT, Def]) getCollectionUrl() string {
 }
 
 func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
+	leftBracket := strings.Contains(modelId, "(")
+	rightBracket := strings.Contains(modelId, ")")
+	if leftBracket && rightBracket {
+		return modelId
+	}
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
 }
 
@@ -127,13 +133,36 @@ type apiSingleResponse[T interface{}] struct {
 type apiMultiResponse[T interface{}] struct {
 	Value    []T    `json:"value"`
 	Count    *int   `json:"@odata.count"`
+	Universe int    `json:"universe"` // total size of the set
 	Context  string `json:"@odata.context"`
 	NextLink string `json:"@odata.nextLink,omitempty"`
 }
 
 // Single model from the API by ID
-func (dataSet odataDataSet[ModelT, Def]) Single(id string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
 	requestUrl := dataSet.getSingleUrl(id)
+	urlArgments := options.toQueryString()
+	if urlArgments != "" {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("GET", requestUrl, nil)
+	var responseModel ModelT
+	if err != nil {
+		return responseModel, err
+	}
+	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
+	if err != nil {
+		return responseModel, err
+	}
+	return responseData, nil
+}
+
+func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
+	requestUrl := dataSet.getSingleUrl(id)
+	urlArgments := options.toQueryString()
+	if urlArgments != "" {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
 	var responseModel ModelT
 	if err != nil {
