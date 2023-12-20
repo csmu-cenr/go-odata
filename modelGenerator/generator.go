@@ -24,8 +24,9 @@ type Generator struct {
 		Results []string `json:"results"`
 	} `json:"imports"`
 	Fields struct {
-		Public bool `json:"public"` // Change a_field__name__ to AFieldName
-		Json   struct {
+		Public   bool `json:"public"` // Change a_field__name__ to AFieldName
+		Pointers bool `json:"pointers"`
+		Json     struct {
 			Tags      bool `json:"tags"`
 			OmitEmpty bool `json:"omitempty"`
 		} `json:"json"`

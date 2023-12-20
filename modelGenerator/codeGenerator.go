@@ -78,7 +78,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			}
 			jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
 		}
-		structString += fmt.Sprintf("\n\t%s %s\t%s", name, prop.goType(), jsonSupport)
+		pointer := ""
+		if g.Fields.Pointers {
+			pointer = "*"
+		}
+		structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, prop.goType(), jsonSupport)
 	}
 
 	return structString + "\n}"
@@ -174,7 +178,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	%s
 	)
 
-	func Results(tableName string, defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]byte, error) {
+	func ByteResults(tableName string, defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]byte, error) {
 
 		client := odataClient.New(url)
 		for key, value := range headers {
