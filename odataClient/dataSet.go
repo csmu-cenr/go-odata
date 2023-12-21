@@ -263,6 +263,8 @@ func SelectFields(jsonInput string, fields []string) ([]byte, error) {
 	for _, key := range fields {
 		if value, ok := inputData[key]; ok {
 			selectedData[key] = value
+		} else {
+			selectedData[key] = nil
 		}
 	}
 
