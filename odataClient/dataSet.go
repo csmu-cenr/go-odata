@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 )
 
@@ -283,6 +284,74 @@ func MakeBytesAny(bytes []byte) []any {
 		anySlice[i] = v
 	}
 	return anySlice
+}
+
+// Converts any list of any struct to a list of maps - with only the selected fields desired.
+func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
+	var result []map[string]interface{}
+
+	// Get the type and value of the input data
+	dataType := reflect.TypeOf(data)
+	dataValue := reflect.ValueOf(data)
+
+	// Ensure the input is a slice
+	if dataType.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("input is not a slice")
+	}
+
+	// Get the type of the slice's elements
+	elemType := dataType.Elem()
+
+	// Ensure the elements are not pointers
+	if elemType.Kind() == reflect.Ptr {
+		elemType = elemType.Elem()
+	}
+
+	// Ensure the elements are structs
+	if elemType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("elements of the slice are not structs")
+	}
+
+	// Iterate over the elements of the slice
+	for i := 0; i < dataValue.Len(); i++ {
+		element := dataValue.Index(i)
+
+		// Ensure the element is a struct
+		if element.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("element at index %d is not a struct", i)
+		}
+
+		// Convert the struct to a map
+		elementMap := make(map[string]interface{})
+		for j := 0; j < element.NumField(); j++ {
+			field := elemType.Field(j)
+			jsonTag := strings.Split(field.Tag.Get("json"), ",")[0]
+
+			// Use the JSON tag as the key if available, otherwise use the field name
+			key := field.Name
+			if jsonTag != "" && jsonTag != "-" {
+				key = jsonTag
+			}
+
+			value := element.Field(j).Interface()
+			elementMap[key] = value
+		}
+
+		// Select the desired fields
+		selectedData := make(map[string]interface{})
+		for _, key := range fields {
+			if value, ok := elementMap[key]; ok {
+				selectedData[key] = value
+			} else {
+				selectedData[key] = nil
+			}
+		}
+
+		// Append the map to the result slice
+		result = append(result, selectedData)
+	}
+
+	return result, nil
 }
 
 // Select fields from a list of json objects
