@@ -233,7 +233,7 @@ import (
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
 			resultsAsBytes += "\n" + generateByteResults(set, "client", "options", "odataClient") + "\n"
-			structResults += "\n" + generateTypeResult(set, "client", "odataClient") + "\n"
+			structResults += "\n" + generateStructSelectList(set, "client", "odataClient") + "\n"
 			structDataSets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 		}
 	}
@@ -247,7 +247,7 @@ import (
 	`
 	code[g.Package.Models] = modelCode
 	code[g.Package.ByteResults] = resultsAsBytes
-	code[g.Package.StructResults] = structResults
+	code[g.Package.StructSelectLists] = structResults
 	code[g.Package.StructDataSets] = structDataSets
 	packageLine := fmt.Sprintf("package %s", packageName)
 	for _, extra := range g.Package.Extras {
@@ -279,11 +279,11 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	return result
 }
 
-func generateTypeResult(set edmxEntitySet, client string, packageName string) string {
+func generateStructSelectList(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}Results(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+	result := `func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
