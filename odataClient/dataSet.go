@@ -327,9 +327,9 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 			fieldValue := dataValue.FieldByName(field.Name).Interface()
 
 			// Add the field and value to the result map
-			result[field.Name] = fieldValue
+			result[fieldName] = fieldValue
 		} else {
-			result[field.Name] = nil
+			result[fieldName] = nil
 		}
 	}
 
