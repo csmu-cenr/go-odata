@@ -286,6 +286,55 @@ func MakeBytesAny(bytes []byte) []any {
 	return anySlice
 }
 
+func StructToMap(data any, fields []string) (map[string]interface{}, error) {
+	dataType := reflect.TypeOf(data)
+	// Ensure data is a struct
+	if dataType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("%v is not a struct", data)
+	}
+	dataValue := reflect.ValueOf(data)
+
+	// Convert the struct to a map
+	dataMap := make(map[string]interface{})
+	for i := 0; i < dataValue.NumField(); i++ {
+		field := dataType.Field(i)
+		jsonTag := strings.Split(field.Tag.Get("json"), ",")[0]
+
+		// Use the JSON tag as the key if available, otherwise use the field name
+		key := field.Name
+		if jsonTag != "" && jsonTag != "-" {
+			key = jsonTag
+		}
+
+		value := dataValue.Field(i).Interface()
+		dataMap[key] = value
+	}
+
+	// Select the desired fields
+	selectedData := make(map[string]interface{})
+	for _, key := range fields {
+		if value, ok := dataMap[key]; ok {
+			selectedData[key] = value
+		} else {
+			selectedData[key] = nil
+		}
+	}
+
+	return selectedData, nil
+}
+
+// findFieldByJSONTag finds a struct field by its JSON tag.
+func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructField, bool) {
+	for i := 0; i < dataType.NumField(); i++ {
+		field := dataType.Field(i)
+		tag := strings.Split(field.Tag.Get("json"), ",")[0]
+		if tag == jsonTag {
+			return field, true
+		}
+	}
+	return reflect.StructField{}, false
+}
+
 // Converts any list of any struct to a list of maps - with only the selected fields desired.
 func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
 	var result []map[string]interface{}
@@ -316,35 +365,9 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 	for i := 0; i < dataValue.Len(); i++ {
 		element := dataValue.Index(i)
 
-		// Ensure the element is a struct
-		if element.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("element at index %d is not a struct", i)
-		}
-
-		// Convert the struct to a map
-		elementMap := make(map[string]interface{})
-		for j := 0; j < element.NumField(); j++ {
-			field := elemType.Field(j)
-			jsonTag := strings.Split(field.Tag.Get("json"), ",")[0]
-
-			// Use the JSON tag as the key if available, otherwise use the field name
-			key := field.Name
-			if jsonTag != "" && jsonTag != "-" {
-				key = jsonTag
-			}
-
-			value := element.Field(j).Interface()
-			elementMap[key] = value
-		}
-
-		// Select the desired fields
-		selectedData := make(map[string]interface{})
-		for _, key := range fields {
-			if value, ok := elementMap[key]; ok {
-				selectedData[key] = value
-			} else {
-				selectedData[key] = nil
-			}
+		selectedData, err := StructToMap(element, fields)
+		if err != nil {
+			return nil, err
 		}
 
 		// Append the map to the result slice
