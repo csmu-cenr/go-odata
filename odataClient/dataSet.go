@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"unicode"
 )
 
 type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
@@ -286,41 +287,53 @@ func MakeBytesAny(bytes []byte) []any {
 	return anySlice
 }
 
-func StructToMap(data any, fields []string) (map[string]interface{}, error) {
-	dataType := reflect.TypeOf(data)
-	// Ensure data is a struct
-	if dataType.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("%v is not a struct", data)
+func isFirstLetterCapital(s string) bool {
+	// Check if the string is not empty
+	if s == "" {
+		return false
 	}
+
+	// Get the first rune (Unicode character) in the string
+	firstRune := []rune(s)[0]
+
+	// Check if the first rune is uppercase
+	return unicode.IsUpper(firstRune)
+}
+
+func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	// Get the type and value of the input data
+	dataType := reflect.TypeOf(data)
 	dataValue := reflect.ValueOf(data)
 
-	// Convert the struct to a map
-	dataMap := make(map[string]interface{})
-	for i := 0; i < dataValue.NumField(); i++ {
-		field := dataType.Field(i)
-		jsonTag := strings.Split(field.Tag.Get("json"), ",")[0]
-
-		// Use the JSON tag as the key if available, otherwise use the field name
-		key := field.Name
-		if jsonTag != "" && jsonTag != "-" {
-			key = jsonTag
-		}
-
-		value := dataValue.Field(i).Interface()
-		dataMap[key] = value
+	// Ensure the input is a struct
+	if dataType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("input is not a struct")
 	}
 
-	// Select the desired fields
-	selectedData := make(map[string]interface{})
-	for _, key := range fields {
-		if value, ok := dataMap[key]; ok {
-			selectedData[key] = value
+	// Iterate over the fields to be selected
+	for _, fieldName := range fields {
+		// Find the field by JSON tag
+		field, found := findFieldByJSONTag(dataType, fieldName)
+		if !found {
+			// Ignore fields not found in the struct
+			continue
+		}
+
+		// field names must be exported to access the value
+		if isFirstLetterCapital(field.Name) {
+			// Get the field value
+			fieldValue := dataValue.FieldByName(field.Name).Interface()
+
+			// Add the field and value to the result map
+			result[field.Name] = fieldValue
 		} else {
-			selectedData[key] = nil
+			result[field.Name] = nil
 		}
 	}
 
-	return selectedData, nil
+	return result, nil
 }
 
 // findFieldByJSONTag finds a struct field by its JSON tag.
@@ -335,7 +348,7 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 	return reflect.StructField{}, false
 }
 
-// Converts any list of any struct to a list of maps - with only the selected fields desired.
+// StructListToMapList converts a list of structs to a list of maps with selected fields.
 func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
 	var result []map[string]interface{}
 
@@ -348,30 +361,18 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 		return nil, fmt.Errorf("input is not a slice")
 	}
 
-	// Get the type of the slice's elements
-	elemType := dataType.Elem()
-
-	// Ensure the elements are not pointers
-	if elemType.Kind() == reflect.Ptr {
-		elemType = elemType.Elem()
-	}
-
-	// Ensure the elements are structs
-	if elemType.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("elements of the slice are not structs")
-	}
-
 	// Iterate over the elements of the slice
 	for i := 0; i < dataValue.Len(); i++ {
-		element := dataValue.Index(i)
+		element := dataValue.Index(i).Interface()
 
-		selectedData, err := StructToMap(element, fields)
+		// Convert the struct to a map with selected fields
+		elementMap, err := StructToMap(element, fields)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error converting struct to map: %v", err)
 		}
 
 		// Append the map to the result slice
-		result = append(result, selectedData)
+		result = append(result, elementMap)
 	}
 
 	return result, nil
