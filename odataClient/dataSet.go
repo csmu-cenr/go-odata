@@ -69,6 +69,15 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 	return options
 }
 
+func ConvertInterfaceToBytes(data interface{}) ([]byte, error) {
+	// Use json.Marshal to convert the interface to a JSON-formatted byte slice
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("error converting interface to bytes: %v", err)
+	}
+	return bytes, nil
+}
+
 func (options ODataQueryOptions) toQueryString() string {
 	queryStrings := url.Values{}
 	if options.Select != "" {
@@ -140,7 +149,7 @@ type apiMultiResponse[T interface{}] struct {
 	NextLink string `json:"@odata.nextLink,omitempty"`
 }
 
-// Single model from the API by ID
+// Single model from the API by ID using the model json tags.
 func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.toQueryString()
@@ -159,6 +168,7 @@ func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOpt
 	return responseData, nil
 }
 
+// Single model from the API using a Value tag, then model tags, by ID
 func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.toQueryString()
@@ -252,32 +262,6 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// Select fields from a json object
-func SelectFields(jsonInput string, fields []string) ([]byte, error) {
-
-	var inputData map[string]interface{}
-	err := json.Unmarshal([]byte(jsonInput), &inputData)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	selectedData := make(map[string]interface{})
-	for _, key := range fields {
-		if value, ok := inputData[key]; ok {
-			selectedData[key] = value
-		} else {
-			selectedData[key] = nil
-		}
-	}
-
-	selectedJSON, err := json.Marshal(selectedData)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return selectedJSON, err
-}
-
 // Makes a byte slice into an any slice
 func MakeBytesAny(bytes []byte) []any {
 	anySlice := make([]interface{}, len(bytes))
@@ -310,6 +294,18 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 	// Ensure the input is a struct
 	if dataType.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input is not a struct")
+	}
+
+	// If fields is empty, map all fields in the struct
+	if len(fields) == 0 {
+		for i := 0; i < dataType.NumField(); i++ {
+			field := dataType.Field(i)
+			if isFirstLetterCapital(field.Name) {
+				fieldValue := dataValue.Field(i).Interface()
+				result[field.Name] = fieldValue
+			}
+		}
+		return result, nil
 	}
 
 	// Iterate over the fields to be selected
@@ -408,16 +404,14 @@ func SelectFieldsList(jsonInput string, fields []string) ([]byte, error) {
 }
 
 // Insert a model to the API
-func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
 	requestUrl := dataSet.getCollectionUrl()
 	var result ModelT
-	jsonData, err := json.Marshal(model)
-	if len(selectFields) > 0 {
-		jsonData, err = SelectFields(string(jsonData), selectFields)
-		if err != nil {
-			return result, err
-		}
+	modelMap, err := StructToMap(model, fields)
+	if err != nil {
+		return result, err
 	}
+	jsonData, err := json.Marshal(modelMap)
 	if err != nil {
 		return result, err
 	}
@@ -431,7 +425,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, selectFields []str
 }
 
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, selectFields []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
 	requestUrl := ""
 	leftBracket := strings.Contains(id, "(")
 	rightBracket := strings.Contains(id, ")")
@@ -441,13 +435,11 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, selectF
 		requestUrl = id
 	}
 	var result ModelT
-	jsonData, err := json.Marshal(model)
-	if len(selectFields) > 0 {
-		jsonData, err = SelectFields(string(jsonData), selectFields)
-		if err != nil {
-			return result, err
-		}
+	modelMap, err := StructToMap(model, fields)
+	if err != nil {
+		return result, err
 	}
+	jsonData, err := json.Marshal(modelMap)
 	if err != nil {
 		return result, err
 	}

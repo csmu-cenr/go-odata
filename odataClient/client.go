@@ -25,7 +25,7 @@ type oDataError struct {
 func (e oDataError) Error() string {
 	bytes, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Error: Code: %d Message: %+v", e.ODataError.Code, e.ODataError.Message)
+		return fmt.Sprintf("Error: Code: %s Message: %+v", e.ODataError.Code, e.ODataError.Message)
 	}
 	return string(bytes)
 }

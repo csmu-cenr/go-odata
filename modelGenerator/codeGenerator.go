@@ -142,14 +142,27 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	var code map[string]string
 	code = make(map[string]string)
 
-	modelPackages := ""
-	for _, modelPackage := range g.Imports.Models {
-		modelPackages += fmt.Sprintf("\t\"%s\"\n", modelPackage)
+	nilModel := `
+	
+	type NilModel struct {
+		Model  string
+		Filter string
 	}
+	
+	func (e NilModel) Error() string {
+		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
+	}
+	`
+
 	modelCode := fmt.Sprintf(`package %s
 
 import (
-%s
+	"fmt"
+	"time"
+
+	"csmu.balance-infosystems.com/depot-maestro/date"
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
 type modelDefinition[T any] struct { client odataClient.ODataClient; name string; url string }
@@ -166,30 +179,32 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	return odataClient.NewDataSet[T](md.client, md)
 }
 
-`, packageName, modelPackages)
+%s
 
-	resultPackages := ""
-	for _, resultPackage := range g.Imports.Results {
-		resultPackages += fmt.Sprintf("\t\"%s\"\n", resultPackage)
-	}
-	resultsAsBytes := fmt.Sprintf(`package %s
+`, packageName, nilModel)
+
+	mappedByTableNameCode := fmt.Sprintf(`package %s
 
 	import (
-	%s
+		"net/url"
+		"strings"
+	
+		"github.com/Uffe-Code/go-odata/odataClient"
 	)
+	
 
-	func ByteResults(tableName string, defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]byte, error) {
+	func MappedInterfaceListByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string) ([]map[string]interface{}, error) {
 
-		client := odataClient.New(url)
+		client := odataClient.New(link)
 		for key, value := range headers {
 			client.AddHeader(key, value)
 		}
 		options := client.ODataQueryOptions()
-		options = options.ApplyArguments(defaultFilter, urlValues)
-	
+		options = options.ApplyArguments(defaultFilter, values)
+
 		switch tableName {
 
-	`, packageName, resultPackages)
+	`, packageName)
 
 	structDataSets := fmt.Sprintf(`
 package %s
@@ -200,12 +215,25 @@ import (
 
 	`, packageName)
 
-	structResults := fmt.Sprintf(`
+	selectCode := fmt.Sprintf(`
 package %s
 
 import (
+	"fmt"
 	"net/url"
 
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+
+`, packageName)
+
+	maps := fmt.Sprintf(`%s
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+	
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
@@ -232,13 +260,14 @@ import (
 			set := schema.EntitySets[name]
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			resultsAsBytes += "\n" + generateByteResults(set, "client", "options", "odataClient") + "\n"
-			structResults += "\n" + generateStructSelectList(set, "client", "odataClient") + "\n"
+			maps += "\n" + ""
+			mappedByTableNameCode += "\n" + generateMappedInterfacesByTableName(set, "client", "options", "odataClient") + "\n"
+			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
 			structDataSets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 		}
 	}
 
-	resultsAsBytes += `
+	mappedByTableNameCode += `
 	default:
 		return nil, nil
 	}
@@ -246,8 +275,8 @@ import (
 }
 	`
 	code[g.Package.Models] = modelCode
-	code[g.Package.ByteResults] = resultsAsBytes
-	code[g.Package.StructSelectLists] = structResults
+	code[g.Package.MappedInterfaceListByTableName] = mappedByTableNameCode
+	code[g.Package.Select] = selectCode
 	code[g.Package.StructDataSets] = structDataSets
 	packageLine := fmt.Sprintf("package %s", packageName)
 	for _, extra := range g.Package.Extras {
@@ -279,11 +308,28 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	return result
 }
 
-func generateStructSelectList(set edmxEntitySet, client string, packageName string) string {
+func generateSelectCode(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+	result := `
+
+	func {{publicName}}SelectSingle(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
+		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+		if err != nil {
+			return {{publicName}}{}, err
+		}
+		if len(models) == 0 {
+			filter := defaultFilter
+			if values.Get("$filter") != "" {
+				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, values.Get("$filter"))
+			}
+			return {{publicName}}{}, NilModel{Model: "{{publicName}}", Filter: filter}
+		}
+		return models[0], nil
+	}
+	
+	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
@@ -314,7 +360,7 @@ func generateStructSelectList(set edmxEntitySet, client string, packageName stri
 	return result
 }
 
-func generateByteResults(set edmxEntitySet, client string, options string, packageName string) string {
+func generateMappedInterfacesByTableName(set edmxEntitySet, client string, options string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -323,29 +369,22 @@ func generateByteResults(set edmxEntitySet, client string, options string, packa
 	case "{{databaseName}}":
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List({{options}})
+		meta, data, errs := dataset.List(options)
 		for err := range errs {
 			return nil, err
 		}
-		fields := strings.Split({{options}}.Select, ",")
-		for result := range meta {
+		fields := strings.Split(options.Select, ",")
+		result := make([]map[string]interface{}, 0)
+		for _ = range meta {
 			for model := range data {
-				if len(fields) > 0 {
-					modelJson, _ := json.Marshal(model)
-					modelText, _ := {{packageName}}.SelectFields(string(modelJson), fields)
-					var modelData map[string]interface{}
-					json.Unmarshal([]byte(modelText), &modelData)
-					result.Value = append(result.Value, modelData)
-				} else {
-					result.Value = append(result.Value, model)
+				data, err := odataClient.StructToMap(model, fields)
+				if err != nil {
+					return result, err
 				}
+				result = append(result, data)
 			}
-			if result.Value == nil {
-				result.Value = []any{}
-			}
-			body, _ := json.Marshal(result)
-			return body, nil
 		}
+		return result, nil
 
 `
 

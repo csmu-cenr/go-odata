@@ -11,18 +11,15 @@ import (
 type Generator struct {
 	ApiUrl  string `json:"apiUrl"`
 	Package struct {
-		CreateDirectoryIfMissing bool     `json:"createDirectoryIfMissing"`
-		Directory                string   `json:"directory"`
-		Extras                   []string `json:"extras"`
-		Models                   string   `json:"models"`
-		ByteResults              string   `json:"byteResults"`
-		StructSelectLists        string   `json:"structSelectLists"`
-		StructDataSets           string   `json:"structDataSets"`
+		CreateDirectoryIfMissing       bool     `json:"createDirectoryIfMissing"`
+		Directory                      string   `json:"directory"`
+		Extras                         []string `json:"extras"`
+		Models                         string   `json:"models"`
+		MappedInterfaceListByTableName string   `json:"mappedInterfaceListByTableName"`
+		Select                         string   `json:"select"`
+		StructDataSets                 string   `json:"structDataSets"`
+		Maps                           string   `json:"maps"`
 	} `json:"package"`
-	Imports struct {
-		Models  []string `json:"models"`
-		Results []string `json:"results"`
-	} `json:"imports"`
 	Fields struct {
 		Public   bool `json:"public"` // Change a_field__name__ to AFieldName
 		Pointers bool `json:"pointers"`
