@@ -183,7 +183,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 `, packageName, nilModel)
 
-	mappedByTableNameCode := fmt.Sprintf(`package %s
+	mappedTablenameCode := fmt.Sprintf(`package %s
 
 	import (
 		"net/url"
@@ -206,7 +206,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 	`, packageName)
 
-	structDataSets := fmt.Sprintf(`
+	datasets := fmt.Sprintf(`
 package %s
 	
 import (
@@ -227,7 +227,7 @@ import (
 
 `, packageName)
 
-	maps := fmt.Sprintf(`%s
+	mapCode := fmt.Sprintf(`package %s
 
 import (
 	"fmt"
@@ -260,14 +260,14 @@ import (
 			set := schema.EntitySets[name]
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			maps += "\n" + ""
-			mappedByTableNameCode += "\n" + generateMappedInterfacesByTableName(set, "client", "options", "odataClient") + "\n"
+			mapCode += "\n" + generateMapCode(set) + "\n"
+			mappedTablenameCode += "\n" + generateMappedInterfacesByTableName(set, "client", "options") + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
-			structDataSets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
+			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 		}
 	}
 
-	mappedByTableNameCode += `
+	mappedTablenameCode += `
 	default:
 		return nil, nil
 	}
@@ -275,9 +275,11 @@ import (
 }
 	`
 	code[g.Package.Models] = modelCode
-	code[g.Package.MappedInterfaceListByTableName] = mappedByTableNameCode
+	code[g.Package.MappedInterfaceListByTableName] = mappedTablenameCode
 	code[g.Package.Select] = selectCode
-	code[g.Package.StructDataSets] = structDataSets
+	code[g.Package.Datasets] = datasets
+	code[g.Package.Maps] = mapCode
+
 	packageLine := fmt.Sprintf("package %s", packageName)
 	for _, extra := range g.Package.Extras {
 		extraCode, err := addPackageNameToExtra(packageLine, extra)
@@ -286,6 +288,7 @@ import (
 		}
 		code[filepath.Base(extra)] = extraCode
 	}
+
 	return code
 }
 
@@ -305,6 +308,80 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	return result
+}
+
+func generateMapCode(set edmxEntitySet) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	result := `
+
+	func {{publicName}}Map(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
+		values := url.Values{}
+		selectArgument := fmt.Sprintf("%sselect", root)
+		values.Add("$select", urlValues.Get(selectArgument))
+		filterArgument := fmt.Sprintf("%sfilter", root)
+		values.Add("$filter", urlValues.Get(filterArgument))
+		orderbyArgument := fmt.Sprintf("%sorderby", root)
+		values.Add("$orderby", urlValues.Get(orderbyArgument))
+		topArgument := fmt.Sprintf("%stop", root)
+		values.Add("$top", urlValues.Get(topArgument))
+		skipArgument := fmt.Sprintf("%sskip", root)
+		values.Add("$skip", urlValues.Get(skipArgument))
+		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
+		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		fields := strings.Split(values.Get("$select"), ",")
+		if values.Get("$odataid") == "true" {
+			fields = append(fields, "@odata.id")
+		}
+		if values.Get("$odataeditlink") == "true" {
+			fields = append(fields, "@odata.editLink")
+		}
+		model, err := {{publicName}}SelectSingle(defaultFilter, values, headers, link)
+		if err != nil {
+			return make(map[string]interface{}), err
+		}
+		data, err := odataClient.StructToMap(model, fields)
+		if err != nil {
+			return make(map[string]interface{}), err
+		}
+		return data, nil
+	}
+
+	func {{publicName}}ListMap(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
+		values := url.Values{}
+		selectArgument := fmt.Sprintf("%sselect", root)
+		values.Add("$select", urlValues.Get(selectArgument))
+		filterArgument := fmt.Sprintf("%sfilter", root)
+		values.Add("$filter", urlValues.Get(filterArgument))
+		orderbyArgument := fmt.Sprintf("%sorderby", root)
+		values.Add("$orderby", urlValues.Get(orderbyArgument))
+		topArgument := fmt.Sprintf("%stop", root)
+		values.Add("$top", urlValues.Get(topArgument))
+		skipArgument := fmt.Sprintf("%sskip", root)
+		values.Add("$skip", urlValues.Get(skipArgument))
+		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
+		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		fields := strings.Split(values.Get("$select"), ",")
+		if values.Get("$odataid") == "true" {
+			fields = append(fields, "@odata.id")
+		}
+		if values.Get("$odataeditlink") == "true" {
+			fields = append(fields, "@odata.editLink")
+		}
+		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+		if err != nil {
+			return make([]map[string]interface{}, 0), err
+		}
+		data, err := odataClient.StructListToMapList(models, fields)
+		if err != nil {
+			return make([]map[string]interface{}, 0), err
+		}
+		return data, nil
+	}
+	`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	return result
 }
 
@@ -360,10 +437,10 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	return result
 }
 
-func generateMappedInterfacesByTableName(set edmxEntitySet, client string, options string, packageName string) string {
+func generateMappedInterfacesByTableName(set edmxEntitySet, client string, options string) string {
 
 	entityType := set.getEntityType()
-	publicName := publicAttribute(entityType.Name)
+	mappedPublicName := publicAttribute(entityType.Name)
 	result := `
 
 	case "{{databaseName}}":
@@ -389,10 +466,9 @@ func generateMappedInterfacesByTableName(set edmxEntitySet, client string, optio
 `
 
 	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
-	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{publicName}}", mappedPublicName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{options}}", options)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 
 	return result
 

@@ -17,7 +17,7 @@ type Generator struct {
 		Models                         string   `json:"models"`
 		MappedInterfaceListByTableName string   `json:"mappedInterfaceListByTableName"`
 		Select                         string   `json:"select"`
-		StructDataSets                 string   `json:"structDataSets"`
+		Datasets                       string   `json:"datasets"`
 		Maps                           string   `json:"maps"`
 	} `json:"package"`
 	Fields struct {
