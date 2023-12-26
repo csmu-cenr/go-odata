@@ -411,11 +411,11 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	if err != nil {
 		return result, err
 	}
-	jsonData, err := json.Marshal(modelMap)
+	payload, err := json.Marshal(modelMap)
 	if err != nil {
 		return result, err
 	}
-	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(jsonData))
+	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(payload))
 	if err != nil {
 		return result, err
 	}
