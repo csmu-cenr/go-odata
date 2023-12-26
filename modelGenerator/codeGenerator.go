@@ -440,7 +440,7 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 func generateMappedInterfacesByTableName(set edmxEntitySet, client string, options string) string {
 
 	entityType := set.getEntityType()
-	mappedPublicName := publicAttribute(entityType.Name)
+	publicName := publicAttribute(entityType.Name)
 	result := `
 
 	case "{{databaseName}}":
@@ -452,7 +452,7 @@ func generateMappedInterfacesByTableName(set edmxEntitySet, client string, optio
 		}
 		fields := strings.Split(options.Select, ",")
 		result := make([]map[string]interface{}, 0)
-		for _ = range meta {
+		for range meta {
 			for model := range data {
 				data, err := odataClient.StructToMap(model, fields)
 				if err != nil {
@@ -466,7 +466,7 @@ func generateMappedInterfacesByTableName(set edmxEntitySet, client string, optio
 `
 
 	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
-	result = strings.ReplaceAll(result, "{{publicName}}", mappedPublicName)
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{options}}", options)
 
