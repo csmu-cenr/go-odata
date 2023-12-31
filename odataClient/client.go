@@ -15,17 +15,16 @@ type oDataClient struct {
 	defaultPageSize int
 }
 
-type oDataError struct {
-	ODataError struct {
-		Code    string      `json:"code"`
-		Message interface{} `json:"message"`
-	} `json:"error"`
+type oDataClientError struct {
+	Function  string
+	Attempted string
+	Detail    interface{}
 }
 
-func (e oDataError) Error() string {
+func (e oDataClientError) Error() string {
 	bytes, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Error: Code: %s Message: %+v", e.ODataError.Code, e.ODataError.Message)
+		return fmt.Sprintf("Function: %s: Attempted: %s Detail: %+v", e.Function, e.Attempted, e.Detail)
 	}
 	return string(bytes)
 }
@@ -109,7 +108,7 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		return responseData, err
 	}
 	if response.StatusCode > 201 {
-		message := oDataError{}
+		message := oDataClientError{}
 		err = json.Unmarshal(body, &message)
 		if err != nil {
 			return responseData, err
@@ -118,12 +117,11 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	}
 	jsonErr := json.Unmarshal(body, &responseData)
 	if jsonErr != nil {
-		modelError := oDataError{}
-		err = json.Unmarshal(body, &modelError)
-		if err != nil {
-			return responseData, jsonErr
-		}
+		modelError := oDataClientError{
+			Function:  "odataClient.executeHttpRequest",
+			Attempted: "json.Unmarshal(body, &responseData)",
+			Detail:    fmt.Sprintf("%s", jsonErr.Error())}
 		return responseData, modelError
 	}
-	return responseData, err
+	return responseData, nil
 }
