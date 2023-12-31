@@ -16,9 +16,9 @@ type oDataClient struct {
 }
 
 type oDataClientError struct {
-	Function  string
-	Attempted string
-	Detail    interface{}
+	Function  string      `json:"function"`
+	Attempted string      `json:"attempted"`
+	Detail    interface{} `json:"detail"`
 }
 
 func (e oDataClientError) Error() string {
