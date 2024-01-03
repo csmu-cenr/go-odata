@@ -18,7 +18,8 @@ type oDataClient struct {
 type oDataClientError struct {
 	Function  string      `json:"function"`
 	Attempted string      `json:"attempted"`
-	Detail    interface{} `json:"detail"`
+	Code      int         `json:"code,omitempty"`
+	Detail    interface{} `json:"detail,omitempty"`
 }
 
 func (e oDataClientError) Error() string {
@@ -100,27 +101,41 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	response, err := client.httpClient.Do(req)
 	var responseData T
 	if err != nil {
-		return responseData, err
+		httpClientDoError := oDataClientError{
+			Function:  "executeHttpRequest",
+			Attempted: "response, err := client.httpClient.Do(req)",
+			Detail:    err}
+		return responseData, httpClientDoError
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return responseData, err
+		ioReadAllError := oDataClientError{
+			Function:  "executeHttpRequest",
+			Attempted: "body, err := io.ReadAll(response.Body)",
+			Detail:    err}
+		return responseData, ioReadAllError
 	}
 	if response.StatusCode > 201 {
-		message := oDataClientError{}
-		err = json.Unmarshal(body, &message)
+		executeHttpRequestError := oDataClientError{Function: "executeHttpRequest",
+			Attempted: "response, err := client.httpClient.Do(req)",
+			Code:      response.StatusCode}
+		var data map[string]interface{}
+		err := json.Unmarshal(body, &data)
 		if err != nil {
-			return responseData, err
+			executeHttpRequestError.Detail = fmt.Sprintf("%s", string(body))
+			return responseData, executeHttpRequestError
+		} else {
+			executeHttpRequestError.Detail = data
 		}
-		return responseData, message
+		return responseData, executeHttpRequestError
 	}
-	jsonErr := json.Unmarshal(body, &responseData)
-	if jsonErr != nil {
+	jsonUnmarshalErr := json.Unmarshal(body, &responseData)
+	if jsonUnmarshalErr != nil {
 		modelError := oDataClientError{
 			Function:  "odataClient.executeHttpRequest",
 			Attempted: "json.Unmarshal(body, &responseData)",
-			Detail:    fmt.Sprintf("%s", jsonErr.Error())}
+			Detail:    fmt.Sprintf("%s", jsonUnmarshalErr.Error())}
 		return responseData, modelError
 	}
 	return responseData, nil
