@@ -1,18 +1,27 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"os"
 
 	"github.com/Uffe-Code/go-odata/modelGenerator"
 )
 
 func main() {
 
-	var config string
-	flag.StringVar(&config, "config", "config.json", "The configuration for the model and results generations.")
-	// Parse the command-line arguments
-	flag.Parse()
+	executable := os.Args[0]
+	if len(os.Args) != 2 {
+		switch executable {
+		case "./go-odata":
+			fmt.Println("Usage: ./go-odata <configfile>")
+		case "go-odata":
+			fmt.Println("Usage: go-odata <configfile>")
+		default:
+			fmt.Println("Usage: go run main.go <configfile>")
+		}
+		os.Exit(1)
+	}
+	config := os.Args[1]
 
 	generator, err := modelGenerator.New(config)
 	if err != nil {
