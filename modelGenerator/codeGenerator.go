@@ -82,7 +82,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 		if g.Fields.Pointers {
 			pointer = "*"
 		}
-		structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, prop.goType(), jsonSupport)
+		goType := prop.goType()
+		if value, ok := g.Fields.Swap[goType]; ok {
+			goType = value
+		}
+		structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
 	}
 
 	return structString + "\n}"
@@ -158,7 +162,6 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 
 import (
 	"fmt"
-	"time"
 
 	"csmu.balance-infosystems.com/depot-maestro/date"
 	"github.com/Uffe-Code/go-nullable/nullable"
@@ -183,7 +186,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 `, packageName, nilModel)
 
-	mappedTablenameCode := fmt.Sprintf(`package %s
+	selectByTableNameCode := fmt.Sprintf(`package %s
 
 	import (
 		"net/url"
@@ -193,7 +196,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	)
 	
 
-	func MappedInterfaceListByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string) ([]map[string]interface{}, error) {
+	func SelectByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string) ([]map[string]interface{}, error) {
 
 		client := odataClient.New(link)
 		for key, value := range headers {
@@ -260,14 +263,14 @@ import (
 			set := schema.EntitySets[name]
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			mapCode += "\n" + generateMapCode(set) + "\n"
-			mappedTablenameCode += "\n" + generateMappedInterfacesByTableName(set, "client", "options") + "\n"
+			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
+			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", "options") + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
 			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 		}
 	}
 
-	mappedTablenameCode += `
+	selectByTableNameCode += `
 	default:
 		return nil, nil
 	}
@@ -275,18 +278,26 @@ import (
 }
 	`
 	code[g.Package.Models] = modelCode
-	code[g.Package.MappedInterfaceListByTableName] = mappedTablenameCode
+	code[g.Package.SelectByTableName] = selectByTableNameCode
 	code[g.Package.Select] = selectCode
 	code[g.Package.Datasets] = datasets
 	code[g.Package.Maps] = mapCode
 
 	packageLine := fmt.Sprintf("package %s", packageName)
-	for _, extra := range g.Package.Extras {
-		extraCode, err := addPackageNameToExtra(packageLine, extra)
+
+	files, err := os.ReadDir(g.Package.Extras)
+	if err != nil {
+		fmt.Printf("Error reading directory %s: %v\n", g.Package.Extras, err)
+		return code
+	}
+
+	for _, extra := range files {
+		path := fmt.Sprintf("%s%s%s", g.Package.Extras, string(os.PathSeparator), extra.Name())
+		extraCode, err := addPackageNameToExtra(packageLine, path)
 		if err != nil {
 			fmt.Printf("Issue with %s. Details: %s\n", extra, err)
 		}
-		code[filepath.Base(extra)] = extraCode
+		code[filepath.Base(extra.Name())] = extraCode
 	}
 
 	return code
@@ -311,13 +322,13 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	return result
 }
 
-func generateMapCode(set edmxEntitySet) string {
+func generateMapFunctionCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
-	func {{publicName}}Map(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
+	func {{publicName}}MapFunction(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
 		values.Add("$select", urlValues.Get(selectArgument))
@@ -437,7 +448,7 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	return result
 }
 
-func generateMappedInterfacesByTableName(set edmxEntitySet, client string, options string) string {
+func generateSelectByTableName(set edmxEntitySet, client string, options string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
