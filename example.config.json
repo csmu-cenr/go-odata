@@ -3,23 +3,12 @@
 	"package": {
 		"createDirectoryIfMissing": true,
 		"directory": "dataModel/",
-		"models": "dataModel.go",
-		"byteResults": "byteResults.go",
-		"structResults": "structResults.go",
-		"structDataSets": "structDataSets.go"
-	},
-	"imports": {
-		"models": [
-			"time",
-			"github.com/Uffe-Code/go-nullable/nullable",
-			"github.com/Uffe-Code/go-odata/odataClient",
-			"github.com/Uffe-Code/go-odata/date"
-		],
-		"results": [
-			"encoding/json",
-			"net/url",
-			"github.com/Uffe-Code/go-odata/odataClient"
-		]
+		"models": "models.go",
+		"selectByTableName": "selectByTableName.go",
+		"select": "select.go",
+		"datasets": "datasets.go",
+		"maps": "maps.go",
+		"extras":"extras"
 	},
 	"fields": {
 		"public": true,
@@ -33,6 +22,10 @@
 			"ODataEditLink  string  `json:\"@odata.editLink,omitempty\"`",
 			"ODataEtag  string  `json:\"@odata.etag,omitempty\"`",
 			"ODataReadLink  string  `json:\"@odata.readLink,omitempty\"`"
-		]
+		],
+		"swap": {
+			"time.Time": "NaiveTime",
+			"nullable.Nullable[time.Time]": "nullable.Nullable[NaiveTime]"
+		}
 	}
 }
