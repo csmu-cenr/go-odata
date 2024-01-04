@@ -2,6 +2,7 @@ package dataModel
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 )
 
@@ -39,7 +40,14 @@ func (nt *NaiveTime) UnmarshalJSON(data []byte) error {
 
 	parsedTime, err := time.Parse(time.RFC3339, timeString)
 	if err != nil {
-		return err
+		parsedTime, err = time.Parse("2006-01-02 15:04:05", timeString)
+		if err != nil {
+			i, err := strconv.ParseInt(timeString, 10, 64)
+			if err != nil {
+				return err
+			}
+			parsedTime = time.Unix(i, 0)
+		}
 	}
 
 	*nt = NaiveTime(parsedTime)
