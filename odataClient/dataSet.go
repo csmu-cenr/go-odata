@@ -270,15 +270,6 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// Makes a byte slice into an any slice
-func MakeBytesAny(bytes []byte) []any {
-	anySlice := make([]interface{}, len(bytes))
-	for i, v := range bytes {
-		anySlice[i] = v
-	}
-	return anySlice
-}
-
 func isFirstLetterCapital(s string) bool {
 	// Check if the string is not empty
 	if s == "" {
@@ -380,35 +371,6 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 	}
 
 	return result, nil
-}
-
-// Select fields from a list of json objects
-func SelectFieldsList(jsonInput string, fields []string) ([]byte, error) {
-
-	var inputData []map[string]interface{}
-	err := json.Unmarshal([]byte(jsonInput), &inputData)
-	if err != nil {
-		return []byte{}, err
-
-	}
-
-	selectedData := make([]map[string]interface{}, len(inputData))
-	for i, item := range inputData {
-		selectedItem := make(map[string]interface{})
-		for _, key := range fields {
-			if value, ok := item[key]; ok {
-				selectedItem[key] = value
-			}
-		}
-		selectedData[i] = selectedItem
-	}
-
-	selectedList, err := json.Marshal(selectedData)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return selectedList, err
 }
 
 // Insert a model to the API
