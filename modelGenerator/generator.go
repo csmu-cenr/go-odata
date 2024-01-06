@@ -40,6 +40,11 @@ type Generator struct {
 			OmitEmpty bool `json:"omitempty"`
 		} `json:"json"`
 		Extras []string `json:"extras"`
+		Ignore struct {
+			StartsWith []string `json:"startsWith"`
+			Contains   []string `json:"contains"`
+			EndsWith   []string `json:"endsWith"`
+		} `json:"ignore"`
 	} `json:"fields"`
 }
 
