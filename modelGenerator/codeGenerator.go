@@ -328,20 +328,20 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
-	func {{publicName}}MapFunction(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
+	func {{publicName}}MapFunction(defaultFilter string, values url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
-		values.Add("$select", urlValues.Get(selectArgument))
+		values.Add("$select", values.Get(selectArgument))
 		filterArgument := fmt.Sprintf("%sfilter", root)
-		values.Add("$filter", urlValues.Get(filterArgument))
+		values.Add("$filter", values.Get(filterArgument))
 		orderbyArgument := fmt.Sprintf("%sorderby", root)
-		values.Add("$orderby", urlValues.Get(orderbyArgument))
+		values.Add("$orderby", values.Get(orderbyArgument))
 		topArgument := fmt.Sprintf("%stop", root)
-		values.Add("$top", urlValues.Get(topArgument))
+		values.Add("$top", values.Get(topArgument))
 		skipArgument := fmt.Sprintf("%sskip", root)
-		values.Add("$skip", urlValues.Get(skipArgument))
+		values.Add("$skip", values.Get(skipArgument))
 		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
-		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		values.Add("$odataeditlink", values.Get(odataeditlinkArgument))
 		fields := strings.Split(values.Get("$select"), ",")
 		if values.Get("$odataid") == "true" {
 			fields = append(fields, "@odata.id")
@@ -360,20 +360,20 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		return data, nil
 	}
 
-	func {{publicName}}ListMap(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
+	func {{publicName}}ListMap(defaultFilter string, values url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
-		values.Add("$select", urlValues.Get(selectArgument))
+		values.Add("$select", values.Get(selectArgument))
 		filterArgument := fmt.Sprintf("%sfilter", root)
-		values.Add("$filter", urlValues.Get(filterArgument))
+		values.Add("$filter", values.Get(filterArgument))
 		orderbyArgument := fmt.Sprintf("%sorderby", root)
-		values.Add("$orderby", urlValues.Get(orderbyArgument))
+		values.Add("$orderby", values.Get(orderbyArgument))
 		topArgument := fmt.Sprintf("%stop", root)
-		values.Add("$top", urlValues.Get(topArgument))
+		values.Add("$top", values.Get(topArgument))
 		skipArgument := fmt.Sprintf("%sskip", root)
-		values.Add("$skip", urlValues.Get(skipArgument))
+		values.Add("$skip", values.Get(skipArgument))
 		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
-		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		values.Add("$odataeditlink", values.Get(odataeditlinkArgument))
 		fields := strings.Split(values.Get("$select"), ",")
 		if values.Get("$odataid") == "true" {
 			fields = append(fields, "@odata.id")
@@ -417,14 +417,14 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+	func {{publicName}}SelectList(defaultFilter string, values url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
 		}
 		options := {{client}}.ODataQueryOptions()
-		options = options.ApplyArguments(defaultFilter, urlValues)
+		options = options.ApplyArguments(defaultFilter, values)
 	
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
