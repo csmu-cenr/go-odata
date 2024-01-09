@@ -67,6 +67,10 @@ func (p edmxProperty) goType() string {
 		goType = "byte"
 	case "Edm.SByte":
 		goType = "int8"
+	case "Edm.TimeOfDay":
+		goType = "time.Duration"
+	case "Edm.Stream":
+		goType = "[]byte"
 	default:
 		if strings.HasPrefix(propertyType, p.schema.Namespace) {
 			entityTypeKey := strings.Replace(propertyType, p.schema.Namespace+".", "", 1)

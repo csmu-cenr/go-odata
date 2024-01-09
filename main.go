@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Uffe-Code/go-odata/modelGenerator"
 )
@@ -10,6 +11,9 @@ import (
 func main() {
 
 	executable := os.Args[0]
+	if strings.Contains(executable, "_debug") {
+		os.Args = append(os.Args, "config.json")
+	}
 	if len(os.Args) != 2 {
 		switch executable {
 		case "./go-odata":
