@@ -51,6 +51,30 @@ func publicAttribute(property string) string {
 	return result
 }
 
+func (g *Generator) validPropertyName(property string) bool {
+	for _, ignore := range g.Fields.Ignore.StartsWith {
+		if strings.HasPrefix(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.Contains {
+		if strings.Contains(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.EndsWith {
+		if strings.HasSuffix(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.Equals {
+		if property == ignore {
+			return false
+		}
+	}
+	return true
+}
+
 func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 
 	publicName := publicAttribute(entityType.Name)
@@ -66,27 +90,30 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 	structString += "\n"
 
 	for _, propertyKey := range propertyKeys {
-		prop := entityType.Properties[propertyKey]
-		name = prop.Name
-		if g.Fields.Public {
-			name = publicAttribute(name)
-		}
-		if g.Fields.Json.Tags {
-			jsonSupport = prop.Name
-			if g.Fields.Json.OmitEmpty {
-				jsonSupport += ",omitempty"
+		include := g.validPropertyName(propertyKey)
+		if include {
+			prop := entityType.Properties[propertyKey]
+			name = prop.Name
+			if g.Fields.Public {
+				name = publicAttribute(name)
 			}
-			jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
+			if g.Fields.Json.Tags {
+				jsonSupport = prop.Name
+				if g.Fields.Json.OmitEmpty {
+					jsonSupport += ",omitempty"
+				}
+				jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
+			}
+			pointer := ""
+			if g.Fields.Pointers {
+				pointer = "*"
+			}
+			goType := prop.goType()
+			if value, ok := g.Fields.Swap[goType]; ok {
+				goType = value
+			}
+			structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
 		}
-		pointer := ""
-		if g.Fields.Pointers {
-			pointer = "*"
-		}
-		goType := prop.goType()
-		if value, ok := g.Fields.Swap[goType]; ok {
-			goType = value
-		}
-		structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
 	}
 
 	return structString + "\n}"
@@ -328,25 +355,25 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
-	func {{publicName}}MapFunction(defaultFilter string, values url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
+	func {{publicName}}MapFunction(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
-		values.Add("$select", values.Get(selectArgument))
+		values.Add("$select", urlValues.Get(selectArgument))
 		filterArgument := fmt.Sprintf("%sfilter", root)
-		values.Add("$filter", values.Get(filterArgument))
+		values.Add("$filter", urlValues.Get(filterArgument))
 		orderbyArgument := fmt.Sprintf("%sorderby", root)
-		values.Add("$orderby", values.Get(orderbyArgument))
+		values.Add("$orderby", urlValues.Get(orderbyArgument))
 		topArgument := fmt.Sprintf("%stop", root)
-		values.Add("$top", values.Get(topArgument))
+		values.Add("$top", urlValues.Get(topArgument))
 		skipArgument := fmt.Sprintf("%sskip", root)
-		values.Add("$skip", values.Get(skipArgument))
+		values.Add("$skip", urlValues.Get(skipArgument))
 		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
-		values.Add("$odataeditlink", values.Get(odataeditlinkArgument))
-		fields := strings.Split(values.Get("$select"), ",")
-		if values.Get("$odataid") == "true" {
+		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		fields := strings.Split(urlValues.Get("$select"), ",")
+		if urlValues.Get("$odataid") == "true" {
 			fields = append(fields, "@odata.id")
 		}
-		if values.Get("$odataeditlink") == "true" {
+		if urlValues.Get("$odataeditlink") == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
 		model, err := {{publicName}}SelectSingle(defaultFilter, values, headers, link)
@@ -360,25 +387,25 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		return data, nil
 	}
 
-	func {{publicName}}ListMap(defaultFilter string, values url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
+	func {{publicName}}ListMap(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
-		values.Add("$select", values.Get(selectArgument))
+		values.Add("$select", urlValues.Get(selectArgument))
 		filterArgument := fmt.Sprintf("%sfilter", root)
-		values.Add("$filter", values.Get(filterArgument))
+		values.Add("$filter", urlValues.Get(filterArgument))
 		orderbyArgument := fmt.Sprintf("%sorderby", root)
-		values.Add("$orderby", values.Get(orderbyArgument))
+		values.Add("$orderby", urlValues.Get(orderbyArgument))
 		topArgument := fmt.Sprintf("%stop", root)
-		values.Add("$top", values.Get(topArgument))
+		values.Add("$top", urlValues.Get(topArgument))
 		skipArgument := fmt.Sprintf("%sskip", root)
-		values.Add("$skip", values.Get(skipArgument))
+		values.Add("$skip", urlValues.Get(skipArgument))
 		odataeditlinkArgument := fmt.Sprintf("%sodataeditlink", root)
-		values.Add("$odataeditlink", values.Get(odataeditlinkArgument))
-		fields := strings.Split(values.Get("$select"), ",")
-		if values.Get("$odataid") == "true" {
+		values.Add("$odataeditlink", urlValues.Get(odataeditlinkArgument))
+		fields := strings.Split(urlValues.Get("$select"), ",")
+		if urlValues.Get("$odataid") == "true" {
 			fields = append(fields, "@odata.id")
 		}
-		if values.Get("$odataeditlink") == "true" {
+		if urlValues.Get("$odataeditlink") == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
 		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
@@ -402,29 +429,29 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
-	func {{publicName}}SelectSingle(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
-		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+	func {{publicName}}SelectSingle(defaultFilter string, urlValues url.Values, headers map[string]string, link string) ({{publicName}}, error) {
+		models, err := {{publicName}}SelectList(defaultFilter, urlValues, headers, link)
 		if err != nil {
 			return {{publicName}}{}, err
 		}
 		if len(models) == 0 {
 			filter := defaultFilter
-			if values.Get("$filter") != "" {
-				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, values.Get("$filter"))
+			if urlValues.Get("$filter") != "" {
+				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, urlValues.Get("$filter"))
 			}
 			return {{publicName}}{}, NilModel{Model: "{{publicName}}", Filter: filter}
 		}
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, values url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(url)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
 		}
 		options := {{client}}.ODataQueryOptions()
-		options = options.ApplyArguments(defaultFilter, values)
+		options = options.ApplyArguments(defaultFilter, urlValues)
 	
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
@@ -434,7 +461,7 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		for err := range errs {
 			return nil, err
 		}
-		for _ = range meta {
+		for range meta {
 			for model := range data {
 				models = append(models, model)
 			}

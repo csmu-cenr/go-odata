@@ -44,6 +44,7 @@ type Generator struct {
 			StartsWith []string `json:"startsWith"`
 			Contains   []string `json:"contains"`
 			EndsWith   []string `json:"endsWith"`
+			Equals     []string `json:"equals"`
 		} `json:"ignore"`
 	} `json:"fields"`
 }

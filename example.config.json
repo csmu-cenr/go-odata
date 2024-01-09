@@ -26,6 +26,35 @@
 		"swap": {
 			"time.Time": "NaiveTime",
 			"nullable.Nullable[time.Time]": "nullable.Nullable[NaiveTime]"
+		},
+		"ignore":{
+			"startsWith":[
+				"_g",
+				"g_",
+				"zz_",
+				"zv_",
+				"zl_",
+				"ZZ"
+			],
+			"contains":[
+				"global"
+			],
+			"endsWith":[
+				"_g"
+			],
+			"equals":[
+				"ids",
+				"gdfc",
+				"gdrc",
+				"grn",
+				"c_constant",
+				"con",
+				"ID_Unstored",
+				"found_count",
+				"summary_list_unstored",
+				"record_id",
+				"mod_id"
+			]
 		}
 	}
 }
