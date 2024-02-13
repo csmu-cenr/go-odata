@@ -38,6 +38,10 @@ func (nt *NaiveTime) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if timeString == "" {
+		timeString = "0001-01-01 00:00:00"
+	}
+
 	parsedTime, err := time.Parse(time.RFC3339, timeString)
 	if err != nil {
 		parsedTime, err = time.Parse("2006-01-02 15:04:05", timeString)
