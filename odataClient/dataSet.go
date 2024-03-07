@@ -45,6 +45,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 
 	options.Expand = queryParams.Get("$expand")
 	options.ODataEditLink = queryParams.Get("$odataeditlink")
+	options.ODataEtag = queryParams.Get("$odataetag")
 	options.ODataId = queryParams.Get("$odataid")
 	options.ODataReadLink = queryParams.Get("$odatareadlink")
 
@@ -59,11 +60,11 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 		options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
 	}
 
-	formatValue := queryParams.Get(("$format"))
-	if formatValue == "" {
+	format := queryParams.Get(("$format"))
+	if format == "" {
 		options.Format = "json"
 	} else {
-		options.Format = formatValue
+		options.Format = format
 	}
 
 	return options
