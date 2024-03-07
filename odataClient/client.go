@@ -41,6 +41,7 @@ type ODataQueryOptions struct {
 
 	Expand        string
 	ODataEditLink string
+	ODataEtag     string
 	ODataId       string
 	ODataReadLink string
 }
@@ -97,6 +98,7 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 }
 
 func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
+
 	client.mapHeadersToRequest(req)
 	response, err := client.httpClient.Do(req)
 	var responseData T
