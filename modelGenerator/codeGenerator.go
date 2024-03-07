@@ -489,6 +489,18 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 			return nil, err
 		}
 		fields := strings.Split(options.Select, ",")
+		if options.ODataId == "true" {
+			fields = append(fields, "@odata.id")
+		}
+		if options.ODataEditLink == "true" {
+			fields = append(fields, "@odata.editLink")
+		}
+		if options.ODataEtag == "true" {
+			fields = append(fields, "@odata.etag")
+		}
+		if options.ODataReadLink == "true" {
+			fields = append(fields, "@odata.readLink")
+		}
 		result := make([]map[string]interface{}, 0)
 		for range meta {
 			for model := range data {
