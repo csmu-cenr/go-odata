@@ -284,6 +284,14 @@ func isFirstLetterCapital(s string) bool {
 	return unicode.IsUpper(firstRune)
 }
 
+func StructToAny(data interface{}, fields []string) (interface{}, error) {
+	result, err := StructToMap(data, fields)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
@@ -342,6 +350,11 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 		}
 	}
 	return reflect.StructField{}, false
+}
+
+// StructListToInterface converts a list of structs to an interface
+func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
+	return StructListToMapList(data, fields)
 }
 
 // StructListToMapList converts a list of structs to a list of maps with selected fields.
