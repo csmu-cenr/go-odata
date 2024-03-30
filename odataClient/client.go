@@ -137,7 +137,7 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		modelError := oDataClientError{
 			Function:  "odataClient.executeHttpRequest",
 			Attempted: "json.Unmarshal(body, &responseData)",
-			Detail:    fmt.Sprintf("%s", jsonUnmarshalErr.Error())}
+			Detail:    jsonUnmarshalErr}
 		return responseData, modelError
 	}
 	return responseData, nil
