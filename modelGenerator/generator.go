@@ -24,6 +24,10 @@ type Generator struct {
 	Package struct {
 		CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
 		Directory                string `json:"directory"`
+		FieldsConstants          string `json:"fieldsConstants"`
+		FieldsPackageName        string
+		TablesConstants          string `json:"tablesConstants"`
+		TablesPackageName        string
 		Extras                   string `json:"extras"`
 		Models                   string `json:"models"`
 		SelectByTableName        string `json:"selectByTableName"`
@@ -54,7 +58,7 @@ func New(path string) (Generator, error) {
 	function := "New Generator"
 	var generator Generator
 
-	bytes, err := os.ReadFile(path) // just pass the file name
+	data, err := os.ReadFile(path) // just pass the file name
 	if err != nil {
 		e := ModelGeneratorError{
 			Attempted: fmt.Sprintf("Reading file: %s", path),
@@ -63,10 +67,10 @@ func New(path string) (Generator, error) {
 		return generator, e
 	}
 
-	err = json.Unmarshal(bytes, &generator)
+	err = json.Unmarshal(data, &generator)
 	if err != nil {
 		e := ModelGeneratorError{
-			Attempted: fmt.Sprintf("Unmarshalling: %s", string(bytes)),
+			Attempted: fmt.Sprintf("Unmarshalling: %s", string(data)),
 			Function:  function,
 			Detail:    err}
 		return generator, e
@@ -91,7 +95,7 @@ func (g Generator) GenerateCode() error {
 		fmt.Printf("%s.\n", err.Error())
 		if g.Package.CreateDirectoryIfMissing {
 			fmt.Printf("Creating %s.\n", dirPath)
-			err := os.Mkdir(dirPath, 0751)
+			err := MkdirP(dirPath, 0755)
 			if err != nil {
 				fmt.Printf("%s does not exist. %s.", dirPath, err.Error())
 				return err
@@ -115,6 +119,70 @@ func (g Generator) GenerateCode() error {
 			return err
 		}
 		_, err = file.WriteString(contents)
+		if err != nil {
+			fmt.Printf("error: %s", err.Error())
+			continue
+		}
+	}
+
+	tablesPath, err := filepath.Abs(g.Package.TablesConstants)
+	if err != nil {
+		return err
+	}
+	tablesPath = filepath.Dir(tablesPath)
+	_, err = os.Stat(dirPath)
+	if os.IsNotExist(err) {
+		fmt.Printf("%s.\n", err.Error())
+		if g.Package.CreateDirectoryIfMissing {
+			fmt.Printf("Creating %s.\n", dirPath)
+			err := MkdirP(tablesPath, 0755)
+			if err != nil {
+				fmt.Printf("%s does not exist. %s.", tablesPath, err.Error())
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	g.Package.TablesPackageName = filepath.Base(tablesPath)
+	contents := g.generateTableConstants(edmx)
+	file, err := os.Create(g.Package.TablesConstants)
+	if err != nil {
+		return err
+	}
+	_, err = file.WriteString(contents)
+	if err != nil {
+		return err
+	}
+
+	fieldsPath, err := filepath.Abs(g.Package.FieldsConstants)
+	if err != nil {
+		return err
+	}
+	fieldsPath = filepath.Dir(fieldsPath)
+	_, err = os.Stat(fieldsPath)
+	if os.IsNotExist(err) {
+		fmt.Printf("%s.\n", err.Error())
+		if g.Package.CreateDirectoryIfMissing {
+			fmt.Printf("Creating %s.\n", fieldsPath)
+			err := MkdirP(fieldsPath, 0755)
+			if err != nil {
+				fmt.Printf("%s does not exist. %s.", fieldsPath, err.Error())
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	g.Package.FieldsPackageName = filepath.Base(fieldsPath)
+	contents = g.generateFieldConstants(edmx)
+	file, err = os.Create(g.Package.FieldsConstants)
+	if err != nil {
+		return err
+	}
+	_, err = file.WriteString(contents)
+	if err != nil {
+		return err
 	}
 
 	return err

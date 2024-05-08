@@ -3,6 +3,8 @@
 	"package": {
 		"createDirectoryIfMissing": true,
 		"directory": "dataModel/",
+		"fieldsConstants":"../depot-maestro/fields/constants.go",
+		"tablesConstants":"../depot-maestro/tables/constants.go",
 		"models": "models.go",
 		"selectByTableName": "selectByTableName.go",
 		"select": "select.go",
