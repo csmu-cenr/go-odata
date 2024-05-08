@@ -170,8 +170,7 @@ const (`, enum.Name, goType)
 
 func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxDataServices) map[string]string {
 
-	var code map[string]string
-	code = make(map[string]string)
+	code := map[string]string{}
 
 	nilModel := `
 	
@@ -190,9 +189,11 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 import (
 	"fmt"
 
-	"csmu.balance-infosystems.com/depot-maestro/date"
 	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
+	"github.com/Uffe-Code/go-odata/date"
+	"time"
+	
 )
 
 type modelDefinition[T any] struct { client odataClient.ODataClient; name string; url string }
@@ -279,7 +280,7 @@ import (
 		}
 
 		var names []string
-		for name, _ := range schema.EntitySets {
+		for name := range schema.EntitySets {
 			names = append(names, name)
 		}
 		sort.Slice(names, func(i, j int) bool {
@@ -328,6 +329,60 @@ import (
 	}
 
 	return code
+}
+
+func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\r", g.Package.FieldsPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\rconst (", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+
+			set := schema.EntitySets[name]
+			entityType := set.getEntityType()
+
+			result = fmt.Sprintf("%s\r\r\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
+
+			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+			for _, property := range propertyKeys {
+				if g.validPropertyName(property) {
+					result = fmt.Sprintf("%s\r\t%s__%s\t=\t`%s`", result, strings.ToUpper(entityType.Name), strings.ToUpper(property), property)
+				}
+			}
+		}
+		result = fmt.Sprintf("%s\r\r)\r", result)
+	}
+	return result
+
+}
+
+func (g *Generator) generateTableConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\r", g.Package.TablesPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\rconst (\r", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+			result = fmt.Sprintf("%s\r\t%s\t=\t`%s`", result, strings.ToUpper(name), name)
+		}
+		result = fmt.Sprintf("%s\r\r)\r", result)
+	}
+	return result
+
 }
 
 func generateDataSet(set edmxEntitySet, client string, packageName string) string {
