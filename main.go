@@ -12,7 +12,7 @@ func main() {
 
 	executable := os.Args[0]
 	if strings.Contains(executable, "_debug") {
-		os.Args = append(os.Args, "config.json")
+		os.Args = append(os.Args, "models-config.json")
 	}
 	if len(os.Args) != 2 {
 		switch executable {
