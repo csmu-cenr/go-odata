@@ -118,14 +118,14 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 			Detail:    err}
 		return responseData, ioReadAllError
 	}
-	if response.StatusCode > 201 {
+	if response.StatusCode >= 400 {
 		executeHttpRequestError := oDataClientError{Function: "executeHttpRequest",
 			Attempted: "response, err := client.httpClient.Do(req)",
 			Code:      response.StatusCode}
 		var data map[string]interface{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
-			executeHttpRequestError.Detail = fmt.Sprintf("%s", string(body))
+			executeHttpRequestError.Detail = string(body)
 			return responseData, executeHttpRequestError
 		} else {
 			executeHttpRequestError.Detail = data
