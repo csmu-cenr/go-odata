@@ -354,7 +354,7 @@ func (g *Generator) generateFieldConstants(dataService edmxDataServices) string 
 
 			for _, property := range propertyKeys {
 				if g.validPropertyName(property) {
-					result = fmt.Sprintf("%s\r\t%s__%s\t=\t`%s`", result, strings.ToUpper(entityType.Name), strings.ToUpper(property), property)
+					result = fmt.Sprintf("%s\r\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
 				}
 			}
 		}
@@ -377,7 +377,7 @@ func (g *Generator) generateTableConstants(dataService edmxDataServices) string 
 			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
 		})
 		for _, name := range names {
-			result = fmt.Sprintf("%s\r\t%s\t=\t`%s`", result, strings.ToUpper(name), name)
+			result = fmt.Sprintf("%s\r\t%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(name), "_"), name)
 		}
 		result = fmt.Sprintf("%s\r\r)\r", result)
 	}
