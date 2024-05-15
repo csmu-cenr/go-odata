@@ -132,6 +132,10 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		}
 		return responseData, executeHttpRequestError
 	}
+	if response.StatusCode == 204 {
+		// No Data - but no error
+		return responseData, nil
+	}
 	jsonUnmarshalErr := json.Unmarshal(body, &responseData)
 	if jsonUnmarshalErr != nil {
 		modelError := oDataClientError{
