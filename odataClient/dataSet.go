@@ -21,8 +21,9 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, fields []string) (ModelT, error)
-	Update(id string, model ModelT, fields []string) (ModelT, error)
+	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
 	Delete(id string) error
+	DeleteByFilter(options ODataQueryOptions) error
 
 	getCollectionUrl() string
 	getSingleUrl(modelId string) string
@@ -35,21 +36,21 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 	}
 }
 
-func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParams url.Values) ODataQueryOptions {
+func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
 
-	options.Select = queryParams.Get("$select")
-	options.Count = queryParams.Get("$count")
-	options.Top = queryParams.Get("$top")
-	options.Skip = queryParams.Get("$skip")
-	options.OrderBy = queryParams.Get("$orderby")
+	options.Select = values.Get("$select")
+	options.Count = values.Get("$count")
+	options.Top = values.Get("$top")
+	options.Skip = values.Get("$skip")
+	options.OrderBy = values.Get("$orderby")
 
-	options.Expand = queryParams.Get("$expand")
-	options.ODataEditLink = queryParams.Get("$odataeditlink")
-	options.ODataEtag = queryParams.Get("$odataetag")
-	options.ODataId = queryParams.Get("$odataid")
-	options.ODataReadLink = queryParams.Get("$odatareadlink")
+	options.Expand = values.Get("$expand")
+	options.ODataEditLink = values.Get("$odataeditlink")
+	options.ODataEtag = values.Get("$odataetag")
+	options.ODataId = values.Get("$odataid")
+	options.ODataReadLink = values.Get("$odatareadlink")
 
-	filterValue := queryParams.Get("$filter")
+	filterValue := values.Get("$filter")
 	if defaultFilter == "" && filterValue != "" {
 		options.Filter = filterValue
 	}
@@ -60,7 +61,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, queryParam
 		options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
 	}
 
-	format := queryParams.Get(("$format"))
+	format := values.Get(("$format"))
 	if format == "" {
 		options.Format = "json"
 	} else {
@@ -136,6 +137,11 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 		return modelId
 	}
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
+}
+
+type apiDeleteResponse[T interface{}] struct {
+	Count *int `json:"@odata.count"`
+	Value []T  `json:"value"`
 }
 
 type apiSingleResponse[T interface{}] struct {
@@ -271,6 +277,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
+// TODO Swap for official struct field is public function
 func isFirstLetterCapital(s string) bool {
 	// Check if the string is not empty
 	if s == "" {
@@ -410,14 +417,8 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 
 // Update a model in the API
 func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
-	requestUrl := ""
-	leftBracket := strings.Contains(id, "(")
-	rightBracket := strings.Contains(id, ")")
-	if !leftBracket && !rightBracket {
-		requestUrl = dataSet.getSingleUrl(id)
-	} else {
-		requestUrl = id
-	}
+	requestUrl := dataSet.getSingleUrl(id)
+
 	var result ModelT
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
@@ -449,5 +450,25 @@ func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
 		return err
 	}
 	_ = response.Body.Close()
+	return nil
+}
+
+func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOptions) error {
+
+	requestUrl := dataSet.getCollectionUrl()
+	urlArgments := options.toQueryString()
+	if urlArgments != "" {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("DELETE", requestUrl, nil)
+	dataSet.client.mapHeadersToRequest(request)
+	if err != nil {
+		return err
+	}
+	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
