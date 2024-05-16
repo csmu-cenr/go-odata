@@ -22,6 +22,7 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, fields []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
+	UpdateByFilter(options ODataQueryOptions) error
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
 
@@ -461,6 +462,26 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("DELETE", requestUrl, nil)
+	dataSet.client.mapHeadersToRequest(request)
+	if err != nil {
+		return err
+	}
+	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(options ODataQueryOptions) error {
+
+	requestUrl := dataSet.getCollectionUrl()
+	urlArgments := options.toQueryString()
+	if urlArgments != "" {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("PATCH", requestUrl, nil)
 	dataSet.client.mapHeadersToRequest(request)
 	if err != nil {
 		return err
