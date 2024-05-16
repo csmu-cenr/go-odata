@@ -46,6 +46,27 @@ type ODataQueryOptions struct {
 	ODataReadLink string
 }
 
+func (o *ODataQueryOptions) Fields() []string {
+	return strings.Split(o.Select, ",")
+}
+
+func (o *ODataQueryOptions) FieldsWithODataTags() []string {
+	fields := o.Fields()
+	if o.ODataId == "true" {
+		fields = append(fields, "@odata.id")
+	}
+	if o.ODataEditLink == "true" {
+		fields = append(fields, "@odata.editLink")
+	}
+	if o.ODataEtag == "true" {
+		fields = append(fields, "@odata.etag")
+	}
+	if o.ODataReadLink == "true" {
+		fields = append(fields, "@odata.readLink")
+	}
+	return fields
+}
+
 // ODataClient represents a connection to the OData REST API
 type ODataClient interface {
 	Wrapper
