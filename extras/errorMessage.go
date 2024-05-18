@@ -3,10 +3,10 @@ package dataModel
 import "encoding/json"
 
 type ErrorMessage struct {
-	Message   string      `json:"message"`
-	Function  string      `json:"function,omitempty"`
 	Attempted string      `json:"attemped,omitempty"`
-	Details   interface{} `json:"details,omitempty"`
+	Err       interface{} `json:"err,omitempty"`
+	Function  string      `json:"function,omitempty"`
+	Message   string      `json:"message"`
 }
 
 func (e ErrorMessage) Error() string {
