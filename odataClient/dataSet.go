@@ -22,7 +22,7 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, fields []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
-	UpdateByFilter(options ODataQueryOptions) error
+	UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
 
@@ -59,7 +59,11 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		options.Filter = defaultFilter
 	}
 	if defaultFilter != "" && filterValue != "" {
-		options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
+		if defaultFilter == filterValue {
+			options.Filter = defaultFilter
+		} else {
+			options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
+		}
 	}
 
 	format := values.Get(("$format"))
@@ -145,6 +149,11 @@ type apiDeleteResponse[T interface{}] struct {
 	Value []T  `json:"value"`
 }
 
+type apiUpdateResponse[T interface{}] struct {
+	Count *int `json:"@odata.count"`
+	Value []T  `json:"value"`
+}
+
 type apiSingleResponse[T interface{}] struct {
 	Value T `json:"value"`
 }
@@ -152,7 +161,7 @@ type apiSingleResponse[T interface{}] struct {
 type apiMultiResponse[T interface{}] struct {
 	Value    []T    `json:"value"`
 	Count    *int   `json:"@odata.count"`
-	Universe int    `json:"universe"` // total size of the set
+	Universe *int   `json:"universe,omitempty"` // total size of the set
 	Context  string `json:"@odata.context"`
 	NextLink string `json:"@odata.nextLink,omitempty"`
 }
@@ -474,19 +483,31 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 	return nil
 }
 
-func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(options ODataQueryOptions) error {
+func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error {
 
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.toQueryString()
 	if urlArgments != "" {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
-	request, err := http.NewRequest("PATCH", requestUrl, nil)
-	dataSet.client.mapHeadersToRequest(request)
+
+	modelMap, err := StructToMap(model, fieldsToUpdate)
 	if err != nil {
 		return err
 	}
-	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
+	jsonData, err := json.Marshal(modelMap)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	dataSet.client.mapHeadersToRequest(request)
+	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
+	request.Header.Set("Prefer", "return=representation")
+
+	_, err = executeHttpRequest[apiUpdateResponse[ModelT]](*dataSet.client, request)
 	if err != nil {
 		return err
 	}
