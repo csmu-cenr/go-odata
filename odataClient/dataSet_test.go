@@ -3,11 +3,12 @@ package odataClient
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/Uffe-Code/go-nullable/nullable"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/stretchr/testify/assert"
 )
 
 type testModel struct {
