@@ -16,10 +16,11 @@ type oDataClient struct {
 }
 
 type oDataClientError struct {
-	Function  string      `json:"function,omitempty"`
-	Attempted string      `json:"attempted,omitempty"`
-	Code      int         `json:"code,omitempty"`
-	Detail    interface{} `json:"detail,omitempty"`
+	Function   string      `json:"function,omitempty"`
+	Attempted  string      `json:"attempted,omitempty"`
+	Code       int         `json:"code,omitempty"`
+	Detail     interface{} `json:"detail,omitempty"`
+	RequestUrl string      `json:"requestUrl,omitempty"`
 }
 
 func (e oDataClientError) Error() string {
