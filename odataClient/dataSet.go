@@ -241,9 +241,10 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
 				executeHttpRequestError := oDataClientError{
-					Function:  "odataClient.List: Anonymous",
-					Attempted: "executeHttpRequest",
-					Detail:    err}
+					Function:   "odataClient.List: Anonymous",
+					Attempted:  "executeHttpRequest",
+					RequestUrl: requestUrl,
+					Detail:     err}
 				errs <- executeHttpRequestError
 				close(meta)
 				close(models)
