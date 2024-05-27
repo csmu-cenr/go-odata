@@ -252,19 +252,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 				return
 			}
 			close(errs) // defer(errs) was blocking.
-			var filters []string
-			if options.Select != "" {
-				filters = strings.Split(options.Select, ",")
-			}
-			if options.ODataEditLink == "true" {
-				filters = append(filters, "@odata.editLink")
-			}
-			if options.ODataId == "true" {
-				filters = append(filters, "@odata.id")
-			}
-			if options.ODataReadLink == "true" {
-				filters = append(filters, "@odata.readLink")
-			}
+
 			result := Result{}
 			result.Context = responseData.Context
 			if options.Count == "true" {
@@ -277,6 +265,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			for _, model := range responseData.Value {
 				models <- model
 			}
+
 			defer close(models)
 			if len(responseData.Value) < dataSet.client.defaultPageSize {
 				return
