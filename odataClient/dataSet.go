@@ -446,10 +446,15 @@ func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
 	}
 	dataSet.client.mapHeadersToRequest(request)
 	response, err := dataSet.client.httpClient.Do(request)
+	if response.Body != nil {
+		response.Body.Close()
+	}
+	if response.StatusCode >= http.StatusBadRequest && err == nil {
+		return fmt.Errorf(`{"StatusCode":%d, "Status":"%s"}`, response.StatusCode, response.Status)
+	}
 	if err != nil {
 		return err
 	}
-	_ = response.Body.Close()
 	return nil
 }
 
