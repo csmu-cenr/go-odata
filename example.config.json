@@ -8,6 +8,7 @@
 		"models": "models.go",
 		"selectByTableName": "selectByTableName.go",
 		"select": "select.go",
+		"update":"update.go"
 		"datasets": "datasets.go",
 		"maps": "maps.go",
 		"extras":"extras"
