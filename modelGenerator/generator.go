@@ -34,6 +34,7 @@ type Generator struct {
 		Select                   string `json:"select"`
 		Datasets                 string `json:"datasets"`
 		Maps                     string `json:"maps"`
+		Update                   string `json:"update"`
 	} `json:"package"`
 	Fields struct {
 		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName

@@ -184,6 +184,15 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	}
 	`
 
+	updateCode := fmt.Sprintf(`package %s
+	
+import (
+	"net/url"
+
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+`, packageName)
+
 	modelCode := fmt.Sprintf(`package %s
 
 import (
@@ -192,7 +201,6 @@ import (
 	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 	"github.com/Uffe-Code/go-odata/date"
-	"time"
 	
 )
 
@@ -295,6 +303,7 @@ import (
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", "options") + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
 			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
+			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
 		}
 	}
 
@@ -310,6 +319,7 @@ import (
 	code[g.Package.Select] = selectCode
 	code[g.Package.Datasets] = datasets
 	code[g.Package.Maps] = mapCode
+	code[g.Package.Update] = updateCode
 
 	packageLine := fmt.Sprintf("package %s", packageName)
 
@@ -402,6 +412,31 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	return result
+}
+
+func generateUpdateCode(set edmxEntitySet, client string, packageName string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+
+	result := `func (o *{{publicName}}) Update(defaultFilter string, values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+
+		{{client}} := {{packageName}}.New(link)
+		for key, value := range headers {
+			{{client}}.AddHeader(key, value)
+		}
+	
+		collection := New{{publicName}}Collection({{client}})
+		dataset := collection.DataSet()
+	
+		return dataset.Update(o.ODataEditLink, *o, fieldsToUpdate)
+	}`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+
+	return result
+
 }
 
 func generateMapFunctionCode(set edmxEntitySet) string {
