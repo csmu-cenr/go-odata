@@ -12,7 +12,7 @@ func main() {
 
 	executable := os.Args[0]
 	if strings.Contains(executable, "_debug") {
-		os.Args = append(os.Args, "models-config.json")
+		os.Args = append(os.Args, "config.json")
 	}
 	if len(os.Args) != 2 {
 		switch executable {
@@ -38,5 +38,5 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Code generated successfully\n")
+	fmt.Printf("\nCode generated successfully\n")
 }

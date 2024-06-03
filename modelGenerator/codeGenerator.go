@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+const (
+	NOTHING = ``
+)
+
 func addPackageNameToExtra(packageLine string, extraPath string) (string, error) {
 
 	var readPath string
@@ -184,7 +188,23 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	}
 	`
 
+	deleteCode := fmt.Sprintf(`package %s
+	
+	import (
+		"github.com/Uffe-Code/go-odata/odataClient"
+	)
+	`, packageName)
+
 	updateCode := fmt.Sprintf(`package %s
+	
+import (
+	"net/url"
+
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+`, packageName)
+
+	insertCode := fmt.Sprintf(`package %s
 	
 import (
 	"net/url"
@@ -238,12 +258,22 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 		for key, value := range headers {
 			client.AddHeader(key, value)
 		}
-		options := client.ODataQueryOptions()
-		options = options.ApplyArguments(defaultFilter, values)
+		{{options}} := client.ODataQueryOptions()
+		options = {{options}}.ApplyArguments(defaultFilter, values)
 
 		switch tableName {
 
 	`, packageName)
+
+	selectByTableNameOptions := `options`
+	selectByTableNameCode = strings.ReplaceAll(selectByTableNameCode, "{{options}}", selectByTableNameOptions)
+
+	saveCode := fmt.Sprintf(`package %s
+
+import (
+	"net/url"
+)
+`, packageName)
 
 	datasets := fmt.Sprintf(`
 package %s
@@ -300,10 +330,13 @@ import (
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
 			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
-			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", "options") + "\n"
+			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
 			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
 			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
+			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
+			saveCode += "\n" + generateSaveCode(set) + "\n"
+			deleteCode += "\n" + generatDeleteCode(set, "client", "odataClient") + "\n"
 		}
 	}
 
@@ -314,13 +347,33 @@ import (
 	return nil, nil
 }
 	`
-	code[g.Package.Models] = modelCode
-	code[g.Package.SelectByTableName] = selectByTableNameCode
-	code[g.Package.Select] = selectCode
-	code[g.Package.Datasets] = datasets
-	code[g.Package.Maps] = mapCode
-	code[g.Package.Update] = updateCode
-
+	if g.Package.Models != NOTHING {
+		code[g.Package.Models] = modelCode
+	}
+	if g.Package.SelectByTableName != NOTHING {
+		code[g.Package.SelectByTableName] = selectByTableNameCode
+	}
+	if g.Package.Select != NOTHING {
+		code[g.Package.Select] = selectCode
+	}
+	if g.Package.Datasets != NOTHING {
+		code[g.Package.Datasets] = datasets
+	}
+	if g.Package.Maps != NOTHING {
+		code[g.Package.Maps] = mapCode
+	}
+	if g.Package.Update != NOTHING {
+		code[g.Package.Update] = updateCode
+	}
+	if g.Package.Insert != NOTHING {
+		code[g.Package.Insert] = insertCode
+	}
+	if g.Package.Save != NOTHING {
+		code[g.Package.Save] = saveCode
+	}
+	if g.Package.Delete != NOTHING {
+		code[g.Package.Delete] = deleteCode
+	}
 	packageLine := fmt.Sprintf("package %s", packageName)
 
 	files, err := os.ReadDir(g.Package.Extras)
@@ -341,60 +394,6 @@ import (
 	return code
 }
 
-func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
-	result := fmt.Sprintf("package %s\r", g.Package.FieldsPackageName)
-
-	for _, schema := range dataService.Schemas {
-		result = fmt.Sprintf("%s\rconst (", result)
-		var names []string
-		for name := range schema.EntitySets {
-			names = append(names, name)
-		}
-		sort.Slice(names, func(i, j int) bool {
-			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
-		})
-		for _, name := range names {
-
-			set := schema.EntitySets[name]
-			entityType := set.getEntityType()
-
-			result = fmt.Sprintf("%s\r\r\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
-
-			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
-
-			for _, property := range propertyKeys {
-				if g.validPropertyName(property) {
-					result = fmt.Sprintf("%s\r\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
-				}
-			}
-		}
-		result = fmt.Sprintf("%s\r\r)\r", result)
-	}
-	return result
-
-}
-
-func (g *Generator) generateTableConstants(dataService edmxDataServices) string {
-	result := fmt.Sprintf("package %s\r", g.Package.TablesPackageName)
-
-	for _, schema := range dataService.Schemas {
-		result = fmt.Sprintf("%s\rconst (\r", result)
-		var names []string
-		for name := range schema.EntitySets {
-			names = append(names, name)
-		}
-		sort.Slice(names, func(i, j int) bool {
-			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
-		})
-		for _, name := range names {
-			result = fmt.Sprintf("%s\r\t%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(name), "_"), name)
-		}
-		result = fmt.Sprintf("%s\r\r)\r", result)
-	}
-	return result
-
-}
-
 func generateDataSet(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
@@ -412,6 +411,129 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	return result
+}
+
+func generatDeleteCode(set edmxEntitySet, client string, packageName string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+
+	result := `func (o *{{publicName}}) Delete(headers map[string]string, link string) error {
+
+	{{client}} := {{packageName}}.New(link)
+	for key, value := range headers {
+		{{client}}.AddHeader(key, value)
+	}
+	
+	collection := New{{publicName}}Collection({{client}})
+	dataset := collection.DataSet()
+	
+	return dataset.Delete(o.ODataEditLink)
+}`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+
+	return result
+
+}
+
+func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\n", g.Package.FieldsPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\nconst (", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+
+			set := schema.EntitySets[name]
+			entityType := set.getEntityType()
+
+			result = fmt.Sprintf("%s\n\n\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
+
+			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+			for _, property := range propertyKeys {
+				if g.validPropertyName(property) {
+					result = fmt.Sprintf("%s\n\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
+				}
+			}
+		}
+		result = fmt.Sprintf("%s\n\n)\n", result)
+	}
+	result = strings.Trim(result, "\n")
+	return result
+
+}
+
+func generateInsertCode(set edmxEntitySet, client string, packageName string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+
+	result := `func (o *{{publicName}}) Insert(values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+
+	{{client}} := {{packageName}}.New(link)
+	for key, value := range headers {
+		{{client}}.AddHeader(key, value)
+	}
+	
+	collection := New{{publicName}}Collection({{client}})
+	dataset := collection.DataSet()
+	
+	return dataset.Insert(*o, fieldsToUpdate)
+}`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+
+	return result
+
+}
+
+func generateSaveCode(set edmxEntitySet) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	result := `func (o *{{publicName}}) Save(defaultFilter string, values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+
+	if o.ODataEditLink == NOTHING {
+		return o.Insert(values, headers, link, fieldsToUpdate)
+	}
+	return o.Save(defaultFilter, values, headers, link, fieldsToUpdate)
+	
+}`
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+
+	return result
+}
+
+func (g *Generator) generateTableConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\r", g.Package.TablesPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\nconst (\n", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+			result = fmt.Sprintf("%s\n\t%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(name), "_"), name)
+		}
+		result = fmt.Sprintf("%s\n)", result)
+	}
+	result = strings.Trim(result, "\n")
+	return result
+
 }
 
 func generateUpdateCode(set edmxEntitySet, client string, packageName string) string {
