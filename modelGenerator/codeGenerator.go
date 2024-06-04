@@ -198,8 +198,6 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	updateCode := fmt.Sprintf(`package %s
 	
 import (
-	"net/url"
-
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -541,7 +539,7 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 
-	result := `func (o *{{publicName}}) Update(defaultFilter string, values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+	result := `func (o *{{publicName}}) Update(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
