@@ -205,8 +205,6 @@ import (
 	insertCode := fmt.Sprintf(`package %s
 	
 import (
-	"net/url"
-
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -268,9 +266,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 	saveCode := fmt.Sprintf(`package %s
 
-import (
-	"net/url"
-)
+
 `, packageName)
 
 	datasets := fmt.Sprintf(`
@@ -499,10 +495,10 @@ func generateSaveCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func (o *{{publicName}}) Save(defaultFilter string, values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+	result := `func (o *{{publicName}}) Save(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
 
 	if o.ODataEditLink == NOTHING {
-		return o.Insert(values, headers, link, fieldsToUpdate)
+		return o.Insert(headers, link, fieldsToUpdate)
 	}
 	return o.Update(headers, link, fieldsToUpdate)
 	
