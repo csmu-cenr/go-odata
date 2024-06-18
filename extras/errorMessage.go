@@ -4,6 +4,7 @@ import "encoding/json"
 
 type ErrorMessage struct {
 	Attempted string      `json:"attemped,omitempty"`
+	Details   interface{} `json:"details"`
 	Err       interface{} `json:"err,omitempty"`
 	Function  string      `json:"function,omitempty"`
 	Message   string      `json:"message"`
