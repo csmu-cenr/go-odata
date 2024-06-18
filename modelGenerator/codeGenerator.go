@@ -504,7 +504,7 @@ func generateSaveCode(set edmxEntitySet) string {
 	if o.ODataEditLink == NOTHING {
 		return o.Insert(values, headers, link, fieldsToUpdate)
 	}
-	return o.Save(defaultFilter, values, headers, link, fieldsToUpdate)
+	return o.Update(headers, link, fieldsToUpdate)
 	
 }`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
