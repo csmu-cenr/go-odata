@@ -475,7 +475,7 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 
-	result := `func (o *{{publicName}}) Insert(values url.Values, headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+	result := `func (o *{{publicName}}) Insert(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
 
 	{{client}} := {{packageName}}.New(link)
 	for key, value := range headers {
