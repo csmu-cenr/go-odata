@@ -228,10 +228,11 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 		for requestUrl != "" {
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
-				newRequestError := oDataClientError{
-					Function:  "odataClient.List: Anonymous",
-					Attempted: fmt.Sprintf("http.NewRequest: %s", requestUrl),
-					Detail:    err}
+				newRequestError := ErrorMessage{
+					Function:   "odataClient.List: Anonymous",
+					Attempted:  `http.NewRequest GET`,
+					RequestUrl: requestUrl,
+					Details:    err}
 				errs <- newRequestError
 				close(meta)
 				close(models)
@@ -240,11 +241,11 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			}
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
-				executeHttpRequestError := oDataClientError{
+				executeHttpRequestError := ErrorMessage{
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  "executeHttpRequest",
 					RequestUrl: requestUrl,
-					Detail:     err}
+					Details:    err}
 				errs <- executeHttpRequestError
 				close(meta)
 				close(models)
