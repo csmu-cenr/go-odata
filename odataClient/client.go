@@ -15,18 +15,19 @@ type oDataClient struct {
 	defaultPageSize int
 }
 
-type oDataClientError struct {
+type ErrorMessage struct {
 	Function   string      `json:"function,omitempty"`
 	Attempted  string      `json:"attempted,omitempty"`
+	Body       string      `json:"body"`
 	Code       int         `json:"code,omitempty"`
-	Detail     interface{} `json:"detail,omitempty"`
+	Details    interface{} `json:"detail,omitempty"`
 	RequestUrl string      `json:"requestUrl,omitempty"`
 }
 
-func (e oDataClientError) Error() string {
-	bytes, err := json.MarshalIndent(e, "", "  ")
+func (ts ErrorMessage) Error() string {
+	bytes, err := json.MarshalIndent(ts, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Function: %s: Attempted: %s Detail: %+v", e.Function, e.Attempted, e.Detail)
+		return fmt.Sprintf("Function: %s: Attempted: %s Details: %+v Body: %s", ts.Function, ts.Attempted, ts.Details, ts.Body)
 	}
 	return string(bytes)
 }
@@ -125,32 +126,32 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	response, err := client.httpClient.Do(req)
 	var responseData T
 	if err != nil {
-		httpClientDoError := oDataClientError{
+		httpClientDoError := ErrorMessage{
 			Function:  "executeHttpRequest",
 			Attempted: "response, err := client.httpClient.Do(req)",
-			Detail:    err}
+			Details:   err}
 		return responseData, httpClientDoError
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		ioReadAllError := oDataClientError{
+		ioReadAllError := ErrorMessage{
 			Function:  "executeHttpRequest",
 			Attempted: "body, err := io.ReadAll(response.Body)",
-			Detail:    err}
+			Details:   err}
 		return responseData, ioReadAllError
 	}
 	if response.StatusCode >= 400 {
-		executeHttpRequestError := oDataClientError{Function: "executeHttpRequest",
+		executeHttpRequestError := ErrorMessage{Function: "executeHttpRequest",
 			Attempted: "response, err := client.httpClient.Do(req)",
 			Code:      response.StatusCode}
 		var data map[string]interface{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
-			executeHttpRequestError.Detail = string(body)
+			executeHttpRequestError.Details = string(body)
 			return responseData, executeHttpRequestError
 		} else {
-			executeHttpRequestError.Detail = data
+			executeHttpRequestError.Details = data
 		}
 		return responseData, executeHttpRequestError
 	}
@@ -160,10 +161,11 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	}
 	jsonUnmarshalErr := json.Unmarshal(body, &responseData)
 	if jsonUnmarshalErr != nil {
-		modelError := oDataClientError{
+		modelError := ErrorMessage{
 			Function:  "odataClient.executeHttpRequest",
 			Attempted: "json.Unmarshal(body, &responseData)",
-			Detail:    jsonUnmarshalErr}
+			Body:      string(body),
+			Details:   jsonUnmarshalErr}
 		return responseData, modelError
 	}
 	return responseData, nil
