@@ -168,6 +168,7 @@ type apiMultiResponse[T interface{}] struct {
 
 // Single model from the API by ID using the model json tags.
 func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
+
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.toQueryString()
 	if urlArgments != "" {
@@ -182,11 +183,13 @@ func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOpt
 	if err != nil {
 		return responseModel, err
 	}
+
 	return responseData, nil
 }
 
 // Single model from the API using a Value tag, then model tags, by ID
 func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
+
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.toQueryString()
 	if urlArgments != "" {
@@ -397,6 +400,7 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 
 // Insert a model to the API
 func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
+
 	requestUrl := dataSet.getCollectionUrl()
 	var result ModelT
 	modelMap, err := StructToMap(model, fields)
@@ -413,13 +417,14 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	}
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
+
 	return executeHttpRequest[ModelT](*dataSet.client, request)
 }
 
 // Update a model in the API
 func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
-	requestUrl := dataSet.getSingleUrl(id)
 
+	requestUrl := dataSet.getSingleUrl(id)
 	var result ModelT
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
@@ -435,6 +440,7 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 	}
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
+
 	return executeHttpRequest[ModelT](*dataSet.client, request)
 }
 
@@ -479,7 +485,7 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 	return nil
 }
 
-func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error {
+func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []string, options ODataQueryOptions) error {
 
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.toQueryString()
@@ -487,7 +493,7 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fieldsToUp
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 
-	modelMap, err := StructToMap(model, fieldsToUpdate)
+	modelMap, err := StructToMap(model, fields)
 	if err != nil {
 		return err
 	}
