@@ -1,6 +1,7 @@
 package odataClient
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,9 +17,10 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
+	Message    string      `json:"message"`
 	Function   string      `json:"function,omitempty"`
 	Attempted  string      `json:"attempted,omitempty"`
-	Body       string      `json:"body"`
+	Body       interface{} `json:"body"`
 	Code       int         `json:"code,omitempty"`
 	Details    interface{} `json:"detail,omitempty"`
 	RequestUrl string      `json:"requestUrl,omitempty"`
@@ -159,14 +161,28 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		// No Data - but no error
 		return responseData, nil
 	}
-	jsonUnmarshalErr := json.Unmarshal(body, &responseData)
-	if jsonUnmarshalErr != nil {
+	colonSpaceQuestion := []byte(`": ?`)
+	colonNull := []byte(`": null`)
+	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
+	if err != nil {
 		modelError := ErrorMessage{
+			Message:   err.Error(),
 			Function:  "odataClient.executeHttpRequest",
-			Attempted: "json.Unmarshal(body, &responseData)",
-			Body:      string(body),
-			Details:   jsonUnmarshalErr}
+			Attempted: "json.MarshalIndent",
+			Body:      string(sanitised),
+			Details:   err}
 		return responseData, modelError
 	}
+	err = json.Unmarshal(sanitised, &responseData)
+	if err != nil {
+		modelError := ErrorMessage{
+			Message:   err.Error(),
+			Function:  "odataClient.executeHttpRequest",
+			Attempted: "json.Unmarshal(body, &responseData)",
+			Body:      string(sanitised),
+			Details:   err}
+		return responseData, modelError
+	}
+
 	return responseData, nil
 }
