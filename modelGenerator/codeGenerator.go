@@ -392,8 +392,8 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}DataSet(headers map[string]string, url string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[{{publicName}}]] {
-		{{client}} := {{packageName}}.New(url)
+	result := `func {{publicName}}DataSet(headers map[string]string, link string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[{{publicName}}]] {
+		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
 		}
@@ -650,9 +650,9 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, url string) ([]{{publicName}}, error) {
+	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
 
-		{{client}} := {{packageName}}.New(url)
+		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
 		}

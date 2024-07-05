@@ -39,26 +39,26 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
 
-	options.Select = values.Get("$select")
-	options.Count = values.Get("$count")
-	options.Top = values.Get("$top")
-	options.Skip = values.Get("$skip")
-	options.OrderBy = values.Get("$orderby")
+	options.Select = values.Get(SELECT)
+	options.Count = values.Get(COUNT)
+	options.Top = values.Get(TOP)
+	options.Skip = values.Get(SKIP)
+	options.OrderBy = values.Get(ORDERBY)
 
-	options.Expand = values.Get("$expand")
-	options.ODataEditLink = values.Get("$odataeditlink")
-	options.ODataEtag = values.Get("$odataetag")
-	options.ODataId = values.Get("$odataid")
-	options.ODataReadLink = values.Get("$odatareadlink")
+	options.Expand = values.Get(EXPAND)
+	options.ODataEditLink = values.Get(ODATAEDITLINK)
+	options.ODataEtag = values.Get(ODATAETAG)
+	options.ODataId = values.Get(ODATAID)
+	options.ODataReadLink = values.Get(ODATAREADLINK)
 
-	filterValue := values.Get("$filter")
-	if defaultFilter == "" && filterValue != "" {
+	filterValue := values.Get(FILTER)
+	if defaultFilter == NOTHING && filterValue != NOTHING {
 		options.Filter = filterValue
 	}
-	if defaultFilter != "" && filterValue == "" {
+	if defaultFilter != NOTHING && filterValue == NOTHING {
 		options.Filter = defaultFilter
 	}
-	if defaultFilter != "" && filterValue != "" {
+	if defaultFilter != NOTHING && filterValue != NOTHING {
 		if defaultFilter == filterValue {
 			options.Filter = defaultFilter
 		} else {
@@ -66,8 +66,8 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		}
 	}
 
-	format := values.Get(("$format"))
-	if format == "" {
+	format := values.Get((FORMAT))
+	if format == NOTHING {
 		options.Format = "json"
 	} else {
 		options.Format = format
@@ -85,40 +85,40 @@ func ConvertInterfaceToBytes(data interface{}) ([]byte, error) {
 	return bytes, nil
 }
 
-func (options ODataQueryOptions) toQueryString() string {
+func (options ODataQueryOptions) ToQueryString() string {
 	queryStrings := url.Values{}
-	if options.Select != "" {
-		queryStrings.Add("$select", options.Select)
+	if options.Select != NOTHING {
+		queryStrings.Add(SELECT, options.Select)
 	}
-	if options.Filter != "" {
-		queryStrings.Add("$filter", options.Filter)
+	if options.Filter != NOTHING {
+		queryStrings.Add(FILTER, options.Filter)
 	}
-	if options.Top != "" {
-		queryStrings.Add("$top", options.Top)
+	if options.Top != NOTHING {
+		queryStrings.Add(TOP, options.Top)
 	}
-	if options.Skip != "" {
-		queryStrings.Add("$skip", options.Skip)
+	if options.Skip != NOTHING {
+		queryStrings.Add(SKIP, options.Skip)
 	}
-	if options.Count != "" {
-		queryStrings.Add("$count", options.Count)
+	if options.Count != NOTHING {
+		queryStrings.Add(COUNT, options.Count)
 	}
-	if options.OrderBy != "" {
-		queryStrings.Add("$orderby", options.OrderBy)
+	if options.OrderBy != NOTHING {
+		queryStrings.Add(ORDERBY, options.OrderBy)
 	}
-	if options.Format != "" {
-		queryStrings.Add("$format", options.Format)
+	if options.Format != NOTHING {
+		queryStrings.Add(FORMAT, options.Format)
 	}
-	if options.Expand != "" {
-		queryStrings.Add("$expand", options.Expand)
+	if options.Expand != NOTHING {
+		queryStrings.Add(EXPAND, options.Expand)
 	}
-	if options.ODataEditLink != "" {
-		queryStrings.Add("$odataeditlink", options.ODataEditLink)
+	if options.ODataEditLink != NOTHING {
+		queryStrings.Add(ODATAEDITLINK, options.ODataEditLink)
 	}
-	if options.ODataId != "" {
-		queryStrings.Add("$odataid", options.ODataId)
+	if options.ODataId != NOTHING {
+		queryStrings.Add(ODATAID, options.ODataId)
 	}
-	if options.ODataReadLink != "" {
-		queryStrings.Add("$odatareadlink", options.ODataReadLink)
+	if options.ODataReadLink != NOTHING {
+		queryStrings.Add(ODATAREADLINK, options.ODataReadLink)
 	}
 	result := queryStrings.Encode()
 	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
@@ -170,8 +170,8 @@ type apiMultiResponse[T interface{}] struct {
 func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
 
 	requestUrl := dataSet.getSingleUrl(id)
-	urlArgments := options.toQueryString()
-	if urlArgments != "" {
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
@@ -191,8 +191,8 @@ func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOpt
 func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
 
 	requestUrl := dataSet.getSingleUrl(id)
-	urlArgments := options.toQueryString()
-	if urlArgments != "" {
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
@@ -227,8 +227,8 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 
 		requestUrl := fmt.Sprintf("%s?%s",
 			dataSet.getCollectionUrl(),
-			options.toQueryString())
-		for requestUrl != "" {
+			options.ToQueryString())
+		for requestUrl != NOTHING {
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
 				newRequestError := ErrorMessage{
@@ -284,7 +284,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 // TODO Swap for official struct field is public function
 func isFirstLetterCapital(s string) bool {
 	// Check if the string is not empty
-	if s == "" {
+	if s == NOTHING {
 		return false
 	}
 
@@ -468,8 +468,8 @@ func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
 func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOptions) error {
 
 	requestUrl := dataSet.getCollectionUrl()
-	urlArgments := options.toQueryString()
-	if urlArgments != "" {
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("DELETE", requestUrl, nil)
@@ -488,8 +488,8 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []string, options ODataQueryOptions) error {
 
 	requestUrl := dataSet.getCollectionUrl()
-	urlArgments := options.toQueryString()
-	if urlArgments != "" {
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 
