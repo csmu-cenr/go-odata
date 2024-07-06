@@ -47,6 +47,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 
 	options.Expand = values.Get(EXPAND)
 	options.ODataEditLink = values.Get(ODATAEDITLINK)
+	options.ODataNavigationLink = values.Get(ODATANAVIGATIONLINK)
 	options.ODataEtag = values.Get(ODATAETAG)
 	options.ODataId = values.Get(ODATAID)
 	options.ODataReadLink = values.Get(ODATAREADLINK)
@@ -113,6 +114,9 @@ func (options ODataQueryOptions) ToQueryString() string {
 	}
 	if options.ODataEditLink != NOTHING {
 		queryStrings.Add(ODATAEDITLINK, options.ODataEditLink)
+	}
+	if options.ODataNavigationLink != NOTHING {
+		queryStrings.Add(ODATANAVIGATIONLINK, options.ODataNavigationLink)
 	}
 	if options.ODataId != NOTHING {
 		queryStrings.Add(ODATAID, options.ODataId)
