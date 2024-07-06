@@ -17,10 +17,10 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
-	Message    string      `json:"message"`
+	Message    string      `json:"message,omitempty"`
 	Function   string      `json:"function,omitempty"`
 	Attempted  string      `json:"attempted,omitempty"`
-	Body       interface{} `json:"body"`
+	Body       interface{} `json:"body,omitempty"`
 	Code       int         `json:"code,omitempty"`
 	Details    interface{} `json:"detail,omitempty"`
 	RequestUrl string      `json:"requestUrl,omitempty"`
@@ -43,29 +43,33 @@ type ODataQueryOptions struct {
 	OrderBy string
 	Format  string
 
-	Expand        string
-	ODataEditLink string
-	ODataEtag     string
-	ODataId       string
-	ODataReadLink string
+	Expand              string
+	ODataEditLink       string
+	ODataNavigationLink string
+	ODataEtag           string
+	ODataId             string
+	ODataReadLink       string
 }
 
-func (o *ODataQueryOptions) Fields() []string {
-	return strings.Split(o.Select, ",")
+func (options *ODataQueryOptions) Fields() []string {
+	return strings.Split(options.Select, ",")
 }
 
-func (o *ODataQueryOptions) FieldsWithODataTags() []string {
-	fields := o.Fields()
-	if o.ODataId == "true" {
+func (options *ODataQueryOptions) FieldsWithODataTags() []string {
+	fields := options.Fields()
+	if options.ODataId == TRUE {
 		fields = append(fields, "@odata.id")
 	}
-	if o.ODataEditLink == "true" {
+	if options.ODataEditLink == TRUE {
 		fields = append(fields, "@odata.editLink")
 	}
-	if o.ODataEtag == "true" {
+	if options.ODataEtag == TRUE {
 		fields = append(fields, "@odata.etag")
 	}
-	if o.ODataReadLink == "true" {
+	if options.ODataNavigationLink == TRUE {
+		fields = append(fields, "@odata.navigationLink")
+	}
+	if options.ODataReadLink == TRUE {
 		fields = append(fields, "@odata.readLink")
 	}
 	return fields
@@ -161,6 +165,7 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		// No Data - but no error
 		return responseData, nil
 	}
+	// Had some dirty data being returned by an odata source where : null was being returned as : ?
 	colonSpaceQuestion := []byte(`": ?`)
 	colonNull := []byte(`": null`)
 	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
