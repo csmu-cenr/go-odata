@@ -167,8 +167,12 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	}
 	// Had some dirty data being returned by an odata source where : null was being returned as : ?
 	colonSpaceQuestion := []byte(`": ?`)
+	// Had some dirty data being returned by an odata source where -0.5 was being returned as -.5 - which is invalid for a number
+	minusDecimalPlace := []byte(`": -.`)
+	minusZeroDecimalPlace := []byte(`": -0.`)
 	colonNull := []byte(`": null`)
 	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
+	sanitised = bytes.ReplaceAll(sanitised, minusDecimalPlace, minusZeroDecimalPlace)
 	if err != nil {
 		modelError := ErrorMessage{
 			Message:   err.Error(),
