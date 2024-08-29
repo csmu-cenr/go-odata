@@ -18,11 +18,12 @@ type oDataClient struct {
 
 type ErrorMessage struct {
 	Message    string      `json:"message,omitempty"`
+	ErrorNo    int         `json:"errorNo"`
 	Function   string      `json:"function,omitempty"`
 	Attempted  string      `json:"attempted,omitempty"`
 	Body       interface{} `json:"body,omitempty"`
-	Code       int         `json:"code,omitempty"`
 	Details    interface{} `json:"detail,omitempty"`
+	InnerError interface{} `json:"err,omitempty"`
 	RequestUrl string      `json:"requestUrl,omitempty"`
 }
 
@@ -133,64 +134,62 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	var responseData T
 	if err != nil {
 		httpClientDoError := ErrorMessage{
-			Function:  "executeHttpRequest",
-			Attempted: "response, err := client.httpClient.Do(req)",
-			Details:   err}
+			Function:   "executeHttpRequest",
+			Attempted:  "response, err := client.httpClient.Do(req)",
+			InnerError: err,
+			ErrorNo:    http.StatusInternalServerError}
 		return responseData, httpClientDoError
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		ioReadAllError := ErrorMessage{
-			Function:  "executeHttpRequest",
-			Attempted: "body, err := io.ReadAll(response.Body)",
-			Details:   err}
-		return responseData, ioReadAllError
+		message := ErrorMessage{
+			Function:   "executeHttpRequest",
+			Attempted:  "body, err := io.ReadAll(response.Body)",
+			InnerError: err,
+			ErrorNo:    http.StatusInternalServerError}
+		return responseData, message
 	}
-	if response.StatusCode >= 400 {
-		executeHttpRequestError := ErrorMessage{Function: "executeHttpRequest",
+	if response.StatusCode >= http.StatusBadRequest {
+		message := ErrorMessage{Function: "executeHttpRequest",
 			Attempted: "response, err := client.httpClient.Do(req)",
-			Code:      response.StatusCode}
+			ErrorNo:   response.StatusCode}
 		var data map[string]interface{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
-			executeHttpRequestError.Details = string(body)
-			return responseData, executeHttpRequestError
+			message.Details = string(body)
+			return responseData, message
 		} else {
-			executeHttpRequestError.Details = data
+			message.Details = data
 		}
-		return responseData, executeHttpRequestError
+		return responseData, message
 	}
-	if response.StatusCode == 204 {
-		// No Data - but no error
+	if response.StatusCode == http.StatusNoContent {
 		return responseData, nil
 	}
-	// Had some dirty data being returned by an odata source where : null was being returned as : ?
-	colonSpaceQuestion := []byte(`": ?`)
-	// Had some dirty data being returned by an odata source where -0.5 was being returned as -.5 - which is invalid for a number
-	minusDecimalPlace := []byte(`": -.`)
-	minusZeroDecimalPlace := []byte(`": -0.`)
-	colonNull := []byte(`": null`)
-	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
-	sanitised = bytes.ReplaceAll(sanitised, minusDecimalPlace, minusZeroDecimalPlace)
+
+	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		modelError := ErrorMessage{
-			Message:   err.Error(),
-			Function:  "odataClient.executeHttpRequest",
-			Attempted: "json.MarshalIndent",
-			Body:      string(sanitised),
-			Details:   err}
-		return responseData, modelError
-	}
-	err = json.Unmarshal(sanitised, &responseData)
-	if err != nil {
-		modelError := ErrorMessage{
-			Message:   err.Error(),
-			Function:  "odataClient.executeHttpRequest",
-			Attempted: "json.Unmarshal(body, &responseData)",
-			Body:      string(sanitised),
-			Details:   err}
-		return responseData, modelError
+
+		// Might be dirty data.
+		sanitised := body
+		// Had some dirty data being returned by an odata source where : null was being returned as : ?
+		questionMark := []byte(`": ?`)
+		null := []byte(`": null`)
+		sanitised = bytes.ReplaceAll(sanitised, questionMark, null)
+		// Had some dirty data being returned by an odata source where -0.5 was being returned as -.5 - which is invalid for a number
+		minus := []byte(`": -.`)
+		zero := []byte(`": -0.`)
+		sanitised = bytes.ReplaceAll(sanitised, minus, zero)
+
+		err = json.Unmarshal(sanitised, &responseData)
+		if err != nil {
+			message := ErrorMessage{
+				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
+				Attempted: "err = json.Unmarshal(sanitised, &responseData)",
+				Body:      string(sanitised), InnerError: err}
+			return responseData, message
+		}
 	}
 
 	return responseData, nil
