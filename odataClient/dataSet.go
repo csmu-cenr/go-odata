@@ -239,7 +239,8 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  `http.NewRequest GET`,
 					RequestUrl: requestUrl,
-					Details:    err}
+					InnerError: err,
+					ErrorNo:    http.StatusInternalServerError}
 				errs <- newRequestError
 				close(meta)
 				close(models)
@@ -252,7 +253,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  "executeHttpRequest",
 					RequestUrl: requestUrl,
-					Details:    err}
+					InnerError: err}
 				errs <- executeHttpRequestError
 				close(meta)
 				close(models)
