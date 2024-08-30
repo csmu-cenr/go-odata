@@ -23,5 +23,6 @@ const (
 	SKIP                = `$skip`
 	TOP                 = `$top`
 	TRUE                = `true`
+	UNEXPECTED_ERROR    = `unexpected error`
 	VALUE               = `$value`
 )

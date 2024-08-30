@@ -173,19 +173,40 @@ type apiMultiResponse[T interface{}] struct {
 // Single model from the API by ID using the model json tags.
 func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
 
+	functionName := `odataDataSet[ModelT, Def]) Single`
+	var responseModel ModelT
+
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()
 	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
-	var responseModel ModelT
+
 	if err != nil {
-		return responseModel, err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Message:    UNEXPECTED_ERROR,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Options:    &options,
+			Details:    fmt.Sprintf(`%+v`, err)}
+		return responseModel, message
 	}
 	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
 	if err != nil {
-		return responseModel, err
+		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Options:    &options,
+			InnerError: err}
+		switch e := err.(type) {
+		case *ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		case ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		default:
+		}
+		return responseModel, message
 	}
 
 	return responseData, nil
@@ -193,6 +214,8 @@ func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOpt
 
 // Single model from the API using a Value tag, then model tags, by ID
 func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
+
+	functionName := `odataDataSet[ModelT, Def]) SingleValue`
 
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()
@@ -206,18 +229,19 @@ func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQue
 	}
 	responseData, err := executeHttpRequest[apiSingleResponse[ModelT]](*dataSet.client, request)
 	if err != nil {
-		return responseModel, err
+		message := ErrorMessage{ErrorNo: http.StatusBadRequest, Function: functionName,
+			RequestUrl: requestUrl,
+			InnerError: err}
+		switch e := err.(type) {
+		case *ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		case ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		default:
+		}
+		return responseModel, message
 	}
 	return responseData.Value, nil
-}
-
-func contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
 
 // List data from the API
@@ -239,6 +263,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  `http.NewRequest GET`,
 					RequestUrl: requestUrl,
+					Payload:    options,
 					InnerError: err,
 					ErrorNo:    http.StatusInternalServerError}
 				errs <- newRequestError
@@ -254,6 +279,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  "executeHttpRequest",
 					RequestUrl: requestUrl,
+					Options:    &options,
 					InnerError: err}
 				// get the internal error number
 				switch e := err.(type) {
@@ -416,28 +442,46 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 // Insert a model to the API
 func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
 
+	functionName := `odataDataSet[ModelT, Def]) Insert`
+
 	requestUrl := dataSet.getCollectionUrl()
 	var result ModelT
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
 		return result, err
 	}
-	payload, err := json.Marshal(modelMap)
+	data, err := json.Marshal(modelMap)
 	if err != nil {
-		return result, err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `http.NewRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Message:    UNEXPECTED_ERROR,
+			Payload:    modelMap,
+			Details:    fmt.Sprintf(`%+v`, err)}
+		return result, message
 	}
-	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(payload))
+	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(data))
 	if err != nil {
-		return result, err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `http.NewRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Message:    UNEXPECTED_ERROR,
+			Payload:    modelMap,
+			Details:    fmt.Sprintf(`%+v`, err)}
+		return result, message
 	}
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
 
-	return executeHttpRequest[ModelT](*dataSet.client, request)
+	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
 
 // Update a model in the API
 func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
+
+	functionName := `odataDataSet[ModelT, Def]) Update`
 
 	requestUrl := dataSet.getSingleUrl(id)
 	var result ModelT
@@ -445,42 +489,65 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 	if err != nil {
 		return result, err
 	}
-	jsonData, err := json.Marshal(modelMap)
+	data, err := json.Marshal(modelMap)
 	if err != nil {
-		return result, err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
 	}
-	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(jsonData))
+	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(data))
 	if err != nil {
-		return result, err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `http.NewRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
 	}
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
 
-	return executeHttpRequest[ModelT](*dataSet.client, request)
+	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
 
 // Delete a model from the API
 func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
+
+	functionName := `odataDataSet[ModelT, Def]) Delete`
+
 	requestUrl := dataSet.getSingleUrl(id)
 	request, err := http.NewRequest("DELETE", requestUrl, nil)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted: `http.NewRequest`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
 	dataSet.client.mapHeadersToRequest(request)
 	response, err := dataSet.client.httpClient.Do(request)
 	if response.Body != nil {
-		response.Body.Close()
-	}
-	if response.StatusCode >= http.StatusBadRequest && err == nil {
-		return fmt.Errorf(`{"StatusCode":%d, "Status":"%s"}`, response.StatusCode, response.Status)
+		defer response.Body.Close()
 	}
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: response.StatusCode,
+			Attempted: `dataSet.client.httpClient.Do`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
+
 	return nil
 }
 
 func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOptions) error {
+
+	functionName := `odataDataSet[ModelT, Def]) DeleteByFilter`
 
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.ToQueryString()
@@ -488,13 +555,24 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("DELETE", requestUrl, nil)
-	dataSet.client.mapHeadersToRequest(request)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted: `http.NewRequest`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
+	dataSet.client.mapHeadersToRequest(request)
 	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `executeHttpRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
 
 	return nil
@@ -502,6 +580,8 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 
 func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []string, options ODataQueryOptions) error {
 
+	functionName := `odataDataSet[ModelT, Def]) UpdateByFilter`
+
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.ToQueryString()
 	if urlArgments != NOTHING {
@@ -510,15 +590,36 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `StructToMap`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: fields,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
-	jsonData, err := json.Marshal(modelMap)
+	data, err := json.Marshal(modelMap)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: fields,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
-	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(jsonData))
+	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(data))
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
 	}
 	dataSet.client.mapHeadersToRequest(request)
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
@@ -526,7 +627,14 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 
 	_, err = executeHttpRequest[apiUpdateResponse[ModelT]](*dataSet.client, request)
 	if err != nil {
-		return err
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload:    modelMap,
+			Options:    &options,
+			InnerError: err}
+		return message
 	}
 
 	return nil

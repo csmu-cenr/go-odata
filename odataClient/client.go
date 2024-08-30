@@ -17,14 +17,16 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
-	Message    string      `json:"message,omitempty"`
-	ErrorNo    int         `json:"errorNo"`
-	Function   string      `json:"function,omitempty"`
-	Attempted  string      `json:"attempted,omitempty"`
-	Body       interface{} `json:"body,omitempty"`
-	Details    interface{} `json:"detail,omitempty"`
-	InnerError interface{} `json:"err,omitempty"`
-	RequestUrl string      `json:"requestUrl,omitempty"`
+	Message    string             `json:"message,omitempty"`
+	ErrorNo    int                `json:"errorNo"`
+	Function   string             `json:"function,omitempty"`
+	Attempted  string             `json:"attempted,omitempty"`
+	Body       interface{}        `json:"body,omitempty"`
+	Details    interface{}        `json:"detail,omitempty"`
+	Options    *ODataQueryOptions `json:"options,omitempty"`
+	Payload    interface{}        `json:"payload"`
+	InnerError interface{}        `json:"err,omitempty"`
+	RequestUrl string             `json:"requestUrl,omitempty"`
 }
 
 func (ts ErrorMessage) Error() string {
@@ -35,21 +37,33 @@ func (ts ErrorMessage) Error() string {
 	return string(bytes)
 }
 
-type ODataQueryOptions struct {
-	Select  string
-	Filter  string
-	Count   string
-	Top     string
-	Skip    string
-	OrderBy string
-	Format  string
+// Function to get the full URL from the http.Request
+func getFullURL(req *http.Request) string {
+	// Determine the scheme (http or https)
+	scheme := "http"
+	if req.TLS != nil {
+		scheme = "https"
+	}
 
-	Expand              string
-	ODataEditLink       string
-	ODataNavigationLink string
-	ODataEtag           string
-	ODataId             string
-	ODataReadLink       string
+	// Construct the full URL
+	return fmt.Sprintf("%s://%s%s", scheme, req.Host, req.RequestURI)
+}
+
+type ODataQueryOptions struct {
+	Select  string `json:"select,omitempty"`
+	Filter  string `json:"filter,omitempty"`
+	Count   string `json:"count,omitempty"`
+	Top     string `json:"top,omitempty"`
+	Skip    string `json:"skip,omitempty"`
+	OrderBy string `json:"orderBy,omitempty"`
+	Format  string `json:"format,omitempty"`
+
+	Expand              string `json:"expand,omitempty"`
+	ODataEditLink       string `json:"odataEditLink,omitempty"`
+	ODataNavigationLink string `json:"odataNavigationLink,omitempty"`
+	ODataEtag           string `json:"odataEtag,omitempty"`
+	ODataId             string `json:"odataId,omitempty"`
+	ODataReadLink       string `json:"odataReadLink,omitempty"`
 }
 
 func (options *ODataQueryOptions) Fields() []string {
@@ -129,14 +143,18 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 
 func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
 
+	functionName := `executeHttpRequest`
+	link := getFullURL(req)
+
 	client.mapHeadersToRequest(req)
 	response, err := client.httpClient.Do(req)
 	var responseData T
 	if err != nil {
 		httpClientDoError := ErrorMessage{
-			Function:   "executeHttpRequest",
-			Attempted:  "response, err := client.httpClient.Do(req)",
+			Function:   functionName,
+			Attempted:  "client.httpClient.Do(req)",
 			InnerError: err,
+			RequestUrl: link,
 			ErrorNo:    http.StatusInternalServerError}
 		return responseData, httpClientDoError
 	}
@@ -147,13 +165,15 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 			Function:   "executeHttpRequest",
 			Attempted:  "body, err := io.ReadAll(response.Body)",
 			InnerError: err,
+			RequestUrl: link,
 			ErrorNo:    http.StatusInternalServerError}
 		return responseData, message
 	}
 	if response.StatusCode >= http.StatusBadRequest {
 		message := ErrorMessage{Function: "executeHttpRequest",
-			Attempted: "response, err := client.httpClient.Do(req)",
-			ErrorNo:   response.StatusCode}
+			Attempted:  "response, err := client.httpClient.Do(req)",
+			RequestUrl: link,
+			ErrorNo:    response.StatusCode}
 		var data map[string]interface{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
@@ -188,6 +208,86 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
 				Attempted: "err = json.Unmarshal(sanitised, &responseData)",
 				Body:      string(sanitised), InnerError: err}
+			return responseData, message
+		}
+	}
+
+	return responseData, nil
+}
+
+func executeHttpRequestPayload[T interface{}](client oDataClient, req *http.Request, payload interface{}) (T, error) {
+
+	functionName := `executeHttpRequestPayload`
+	link := getFullURL(req)
+
+	client.mapHeadersToRequest(req)
+	response, err := client.httpClient.Do(req)
+	var responseData T
+	if err != nil {
+		httpClientDoError := ErrorMessage{
+			Function:   functionName,
+			Attempted:  "client.httpClient.Do(req)",
+			InnerError: err,
+			RequestUrl: link,
+			Payload:    payload,
+			ErrorNo:    http.StatusInternalServerError}
+		return responseData, httpClientDoError
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		message := ErrorMessage{
+			Function:   "executeHttpRequest",
+			Attempted:  "body, err := io.ReadAll(response.Body)",
+			InnerError: err,
+			RequestUrl: link,
+			Payload:    payload,
+			ErrorNo:    http.StatusInternalServerError}
+		return responseData, message
+	}
+	if response.StatusCode >= http.StatusBadRequest {
+		message := ErrorMessage{Function: "executeHttpRequest",
+			Attempted:  "response, err := client.httpClient.Do(req)",
+			RequestUrl: link,
+			Message:    UNEXPECTED_ERROR,
+			Payload:    payload,
+			ErrorNo:    response.StatusCode}
+		var data map[string]interface{}
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			message.Details = string(body)
+			return responseData, message
+		}
+		message.Details = data
+		return responseData, message
+	}
+	if response.StatusCode == http.StatusNoContent {
+		return responseData, nil
+	}
+
+	err = json.Unmarshal(body, &responseData)
+	if err != nil {
+
+		// Might be dirty data.
+		sanitised := body
+		// Had some dirty data being returned by an odata source where : null was being returned as : ?
+		questionMark := []byte(`": ?`)
+		null := []byte(`": null`)
+		sanitised = bytes.ReplaceAll(sanitised, questionMark, null)
+		// Had some dirty data being returned by an odata source where -0.5 was being returned as -.5 - which is invalid for a number
+		minus := []byte(`": -.`)
+		zero := []byte(`": -0.`)
+		sanitised = bytes.ReplaceAll(sanitised, minus, zero)
+
+		err = json.Unmarshal(sanitised, &responseData)
+		if err != nil {
+			message := ErrorMessage{
+				ErrorNo: http.StatusInternalServerError,
+				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
+				Attempted:  "err = json.Unmarshal(sanitised, &responseData)",
+				Body:       string(sanitised),
+				Payload:    payload,
+				InnerError: err}
 			return responseData, message
 		}
 	}
