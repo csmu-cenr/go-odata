@@ -159,9 +159,8 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		if err != nil {
 			message.Details = string(body)
 			return responseData, message
-		} else {
-			message.Details = data
 		}
+		message.Details = data
 		return responseData, message
 	}
 	if response.StatusCode == http.StatusNoContent {
@@ -185,6 +184,7 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		err = json.Unmarshal(sanitised, &responseData)
 		if err != nil {
 			message := ErrorMessage{
+				ErrorNo: http.StatusInternalServerError,
 				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
 				Attempted: "err = json.Unmarshal(sanitised, &responseData)",
 				Body:      string(sanitised), InnerError: err}

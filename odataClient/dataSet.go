@@ -250,10 +250,20 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
 				executeHttpRequestError := ErrorMessage{
+					ErrorNo:    http.StatusInternalServerError,
 					Function:   "odataClient.List: Anonymous",
 					Attempted:  "executeHttpRequest",
 					RequestUrl: requestUrl,
 					InnerError: err}
+				// get the internal error number
+				switch e := err.(type) {
+				case *ErrorMessage:
+					executeHttpRequestError.ErrorNo = e.ErrorNo
+				case ErrorMessage:
+					executeHttpRequestError.ErrorNo = e.ErrorNo
+				default:
+				}
+
 				errs <- executeHttpRequestError
 				close(meta)
 				close(models)
