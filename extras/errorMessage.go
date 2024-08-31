@@ -6,6 +6,7 @@ type ErrorMessage struct {
 	Attempted string      `json:"attemped,omitempty"`
 	Details   interface{} `json:"details"`
 	Err       interface{} `json:"err,omitempty"`
+	ErrorNo   int         `json:"errorNo"`
 	Function  string      `json:"function,omitempty"`
 	Message   string      `json:"message"`
 }
