@@ -22,7 +22,7 @@ type ErrorMessage struct {
 	Function   string             `json:"function,omitempty"`
 	Attempted  string             `json:"attempted,omitempty"`
 	Body       interface{}        `json:"body,omitempty"`
-	Details    interface{}        `json:"detail,omitempty"`
+	Details    interface{}        `json:"details,omitempty"`
 	Options    *ODataQueryOptions `json:"options,omitempty"`
 	Payload    interface{}        `json:"payload"`
 	InnerError interface{}        `json:"err,omitempty"`
