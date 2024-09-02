@@ -39,14 +39,26 @@ func (ts ErrorMessage) Error() string {
 
 // Function to get the full URL from the http.Request
 func getFullURL(req *http.Request) string {
-	// Determine the scheme (http or https)
-	scheme := "http"
-	if req.TLS != nil {
-		scheme = "https"
+
+	scheme := req.URL.Scheme
+	host := req.URL.Host
+	path := req.URL.Path
+	port := req.URL.Port()
+	switch port {
+	case "443", "80", "":
+		port = NOTHING
+	default:
+		port = `:` + port
+	}
+	query := req.URL.RawQuery
+	if len(query) > 0 {
+		query = `?` + query
 	}
 
 	// Construct the full URL
-	return fmt.Sprintf("%s://%s%s", scheme, req.Host, req.RequestURI)
+	result := fmt.Sprintf("%s://%s%s%s%s", scheme, host, port, path, query)
+
+	return result
 }
 
 type ODataQueryOptions struct {
