@@ -439,6 +439,26 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 	return result, nil
 }
 
+// removeEmptyKeys resolves an issue when the odata source sends back an invalid editlink with an empty string key
+func removeEmptyKeys(requestUrl string) string {
+
+	if strings.Contains(requestUrl, DOUBLE_SINGLE_QUOTE) {
+		elements := strings.Split(requestUrl, LEFT_BRACKET)
+		keys := strings.Split(elements[1], COMMA)
+		valid := []string{}
+		for _, k := range keys {
+			key := strings.Split(k, RIGHT_BRACKET)[0]
+			if strings.EqualFold(key, DOUBLE_SINGLE_QUOTE) {
+				continue
+			}
+			valid = append(valid, key)
+		}
+		requestUrl = fmt.Sprintf(`%s(%s)`, elements[0], strings.Join(valid, COMMA))
+	}
+
+	return requestUrl
+}
+
 // Insert a model to the API
 func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
 
@@ -483,7 +503,8 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 
 	functionName := `odataDataSet[ModelT, Def]) Update`
 
-	requestUrl := dataSet.getSingleUrl(id)
+	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
+
 	var result ModelT
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {

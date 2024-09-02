@@ -29,10 +29,10 @@ type ErrorMessage struct {
 	RequestUrl string             `json:"requestUrl,omitempty"`
 }
 
-func (ts ErrorMessage) Error() string {
-	bytes, err := json.MarshalIndent(ts, "", "  ")
+func (e ErrorMessage) Error() string {
+	bytes, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Function: %s: Attempted: %s Details: %+v Body: %s", ts.Function, ts.Attempted, ts.Details, ts.Body)
+		return fmt.Sprintf("Function: %s: Attempted: %s Details: %+v Body: %s", e.Function, e.Attempted, e.Details, e.Body)
 	}
 	return string(bytes)
 }
