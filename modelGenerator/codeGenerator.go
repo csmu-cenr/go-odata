@@ -7,10 +7,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 const (
+	FALSE   = `false`
 	NOTHING = ``
+	TRUE    = `true`
 )
 
 func addPackageNameToExtra(packageLine string, extraPath string) (string, error) {
@@ -119,8 +122,12 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
 		}
 	}
+	structString += "\n}\n\n"
+	structString += fmt.Sprintf("type\t%sAlias\t[]%s\n", publicName, publicName)
+	structString += fmt.Sprintf("type\t%sAsc\t[]%s\n", publicName, publicName)
+	structString += fmt.Sprintf("type\t%sDesc\t[]%s\n", publicName, publicName)
 
-	return structString + "\n}"
+	return structString
 }
 
 func generateModelDefinition(set edmxEntitySet) string {
@@ -198,6 +205,10 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	updateCode := fmt.Sprintf(`package %s
 	
 import (
+	"fmt"
+	"net/http"
+	"reflect"
+
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -205,6 +216,10 @@ import (
 	insertCode := fmt.Sprintf(`package %s
 	
 import (
+	"fmt"
+	"net/http"
+	"reflect"
+
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -266,6 +281,10 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 	saveCode := fmt.Sprintf(`package %s
 
+	import (
+		"encoding/json"
+		"fmt"
+	)
 
 `, packageName)
 
@@ -283,7 +302,9 @@ package %s
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
+	"reflect"
 
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
@@ -327,10 +348,10 @@ import (
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
 			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
-			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
-			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
-			saveCode += "\n" + generateSaveCode(set) + "\n"
-			deleteCode += "\n" + generatDeleteCode(set, "client", "odataClient") + "\n"
+			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient", g.Fields.Quoted) + "\n"
+			insertCode += "\n" + generateInsertCode(set, "client", "odataClient", g.Fields.Quoted) + "\n"
+			saveCode += "\n" + generateSaveCode(set, g.Fields.Quoted) + "\n"
+			deleteCode += "\n" + generateDeleteCode(set, "client", "odataClient") + "\n"
 		}
 	}
 
@@ -407,7 +428,7 @@ func generateDataSet(set edmxEntitySet, client string, packageName string) strin
 	return result
 }
 
-func generatDeleteCode(set edmxEntitySet, client string, packageName string) string {
+func generateDeleteCode(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -466,12 +487,12 @@ func (g *Generator) generateFieldConstants(dataService edmxDataServices) string 
 
 }
 
-func generateInsertCode(set edmxEntitySet, client string, packageName string) string {
+func generateInsertCode(set edmxEntitySet, client string, packageName string, quoted bool) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 
-	result := `func (o *{{publicName}}) Insert(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+	result := `func ({{type}} *{{publicName}}) Insert(headers map[string]string, link string) ({{publicName}}, error) {
 
 	{{client}} := {{packageName}}.New(link)
 	for key, value := range headers {
@@ -480,30 +501,117 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 	
 	collection := New{{publicName}}Collection({{client}})
 	dataset := collection.DataSet()
+	modifiedFields := ModifiedFields({{type}})
+	selectedFields := SelectedFields({{type}},false)
+
+	result, err := dataset.Insert(*{{type}}, modifiedFields, {{quoted}})
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  DATASET_UPDATE,
+			Details:    fmt.Sprintf("%+v", err),
+			ErrorNo:    http.StatusInternalServerError,
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
+	err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
+			Details:    fmt.Sprintf("%+v", err),
+			ErrorNo:    http.StatusInternalServerError,
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
 	
-	return dataset.Insert(*o, fieldsToUpdate)
+	return result, err
 }`
+
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+
+	if quoted {
+		result = strings.ReplaceAll(result, "{{quoted}}", TRUE)
+	} else {
+		result = strings.ReplaceAll(result, "{{quoted}}", FALSE)
+	}
 
 	return result
 
 }
 
-func generateSaveCode(set edmxEntitySet) string {
+func generateSaveCode(set edmxEntitySet, quoted bool) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func (o *{{publicName}}) Save(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
-
-	if o.ODataEditLink == NOTHING {
-		return o.Insert(headers, link, fieldsToUpdate)
+	result := `func ({{type}} *{{publicName}}) Save(headers map[string]string, link string) ({{publicName}}, error) {
+	if !{{type}}.Modified(){
+		return *{{type}}, nil
+	} 
+	if {{type}}.ODataEditLink == NOTHING {
+		return {{type}}.Insert(headers, link)
 	}
-	return o.Update(headers, link, fieldsToUpdate)
+	return {{type}}.Update(headers, link)
+}
+
+func ({{type}} *{{publicName}}) Modified() bool {
+	return Modified({{type}})
+}
+
+func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string) ([]{{publicName}}, error) {
+	result := []{{publicName}}{}
 	
-}`
+	{{publicName}}Slice := []{{publicName}}(alias)
+	for _, {{type}} := range {{publicName}}Slice {
+		{{type}}.Save(headers, link)
+		result = append(result, {{type}})
+	}
+	
+	return result, nil
+}
+
+func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
+	result := []byte{}
+	
+	data, err := StructListToMapList(alias, fields)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "PersistentAlias.StructListToMapList",
+			Details:    fmt.Sprintf("%+v", err),
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
+	result, err = json.Marshal(data)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "PersistentAlias.Marshal",
+			Details:    fmt.Sprintf("%+v", err),
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
+	
+	return result, nil
+}
+
+`
+
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
 
 	return result
 }
@@ -530,12 +638,12 @@ func (g *Generator) generateTableConstants(dataService edmxDataServices) string 
 
 }
 
-func generateUpdateCode(set edmxEntitySet, client string, packageName string) string {
+func generateUpdateCode(set edmxEntitySet, client string, packageName string, quoted bool) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 
-	result := `func (o *{{publicName}}) Update(headers map[string]string, link string, fieldsToUpdate []string) ({{publicName}}, error) {
+	result := `func ({{type}} *{{publicName}}) Update(headers map[string]string, link string) ({{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
@@ -544,12 +652,48 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
-	
-		return dataset.Update(o.ODataEditLink, *o, fieldsToUpdate)
+
+		modifiedFields := ModifiedFields({{type}})
+		selectedFields := SelectedFields({{type}},false)
+
+		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields, {{quoted}})
+		if err != nil {
+			m := ErrorMessage{
+				Attempted:  DATASET_UPDATE,
+				Details:    fmt.Sprintf("%+v", err),
+				ErrorNo:    http.StatusInternalServerError,
+				InnerError: err,
+				Message:    UNEXPECTED_ERROR,
+			}
+			return result, m
+		}
+		err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
+		if err != nil {
+			m := ErrorMessage{
+				Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
+				Details:    fmt.Sprintf("%+v", err),
+				ErrorNo:    http.StatusInternalServerError,
+				InnerError: err,
+				Message:    UNEXPECTED_ERROR,
+			}
+			return result, m
+		}
+		return result, err
 	}`
+
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+
+	if quoted {
+		result = strings.ReplaceAll(result, "{{quoted}}", TRUE)
+	} else {
+		result = strings.ReplaceAll(result, "{{quoted}}", FALSE)
+	}
 
 	return result
 
@@ -635,6 +779,24 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
+	// SetSelected sets each {{publicName}} Nullable tag name to the value specified. 
+	// fields is the json tags for each Nullable field in {{publicName}}
+	// value is the desired value for {{publicName}}Selected.
+	// invert if set to true sets {{publicName}}Selected to the !value if the tag is not found in fields.
+	func({{type}} *{{publicName}})SetSelected(fields []string, value bool, not bool) error {
+		err := SetSelectedBooleanFields(reflect.ValueOf({{type}}), fields, value, not)
+		if err != nil {
+			m := ErrorMessage{
+				Attempted: "SetSelectedBooleanFields",
+				Details: fmt.Sprintf("%+v",err),
+				ErrorNo: http.StatusInternalServerError,
+				Message: UNEXPECTED_ERROR,
+			}
+			return m
+		}
+		return nil
+	}
+
 	func {{publicName}}SelectSingle(defaultFilter string, urlValues url.Values, headers map[string]string, link string) ({{publicName}}, error) {
 		models, err := {{publicName}}SelectList(defaultFilter, urlValues, headers, link)
 		if err != nil {
@@ -678,6 +840,9 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
 	return result
 }
 

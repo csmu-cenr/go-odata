@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"unicode"
 )
 
 type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
@@ -20,8 +19,8 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Single(id string, options ODataQueryOptions) (ModelT, error)
 	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT, fields []string) (ModelT, error)
-	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
+	Insert(model ModelT, fields []string, quoted bool) (ModelT, error)
+	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string, quoted bool) (ModelT, error)
 	UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
@@ -322,18 +321,9 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// TODO Swap for official struct field is public function
-func isFirstLetterCapital(s string) bool {
-	// Check if the string is not empty
-	if s == NOTHING {
-		return false
-	}
-
-	// Get the first rune (Unicode character) in the string
-	firstRune := []rune(s)[0]
-
-	// Check if the first rune is uppercase
-	return unicode.IsUpper(firstRune)
+// isFieldExported checks if a struct field is public (exported).
+func isFieldExported(field reflect.StructField) bool {
+	return field.PkgPath == ""
 }
 
 func StructToAny(data interface{}, fields []string) (interface{}, error) {
@@ -360,7 +350,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 	if len(fields) == 0 {
 		for i := 0; i < dataType.NumField(); i++ {
 			field := dataType.Field(i)
-			if isFirstLetterCapital(field.Name) {
+			if isFieldExported(field) {
 				fieldValue := dataValue.Field(i).Interface()
 				result[field.Name] = fieldValue
 			}
@@ -378,7 +368,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 		}
 
 		// field names must be exported to access the value
-		if isFirstLetterCapital(field.Name) {
+		if isFieldExported(field) {
 			// Get the field value
 			fieldValue := dataValue.FieldByName(field.Name).Interface()
 
@@ -460,7 +450,7 @@ func removeEmptyKeys(requestUrl string) string {
 }
 
 // Insert a model to the API
-func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, quoted bool) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) Insert`
 
@@ -469,6 +459,13 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
 		return result, err
+	}
+	if quoted {
+		quotedMap := map[string]interface{}{}
+		for k, v := range modelMap {
+			quotedMap[fmt.Sprintf(`"%s"`, k)] = v
+		}
+		modelMap = quotedMap
 	}
 	data, err := json.Marshal(modelMap)
 	if err != nil {
@@ -499,7 +496,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 }
 
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string, quoted bool) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) Update`
 
@@ -509,6 +506,13 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 	modelMap, err := StructToMap(model, fields)
 	if err != nil {
 		return result, err
+	}
+	if quoted {
+		quotedMap := map[string]interface{}{}
+		for k, v := range modelMap {
+			quotedMap[fmt.Sprintf(`"%s"`, k)] = v
+		}
+		modelMap = quotedMap
 	}
 	data, err := json.Marshal(modelMap)
 	if err != nil {
@@ -620,7 +624,15 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 			Details: fmt.Sprintf(`%+v`, err)}
 		return message
 	}
+	if options.Quoted {
+		quoted := map[string]interface{}{}
+		for k, v := range modelMap {
+			quoted[fmt.Sprintf(`"%s"`, k)] = v
+		}
+		modelMap = quoted
+	}
 	data, err := json.Marshal(modelMap)
+
 	if err != nil {
 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
 			Attempted:  `json.Marshal`,
