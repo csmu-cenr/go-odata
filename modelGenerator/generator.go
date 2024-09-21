@@ -43,6 +43,7 @@ type Generator struct {
 	} `json:"package"`
 	Fields struct {
 		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName
+		Quoted   bool              `json:"quoted"`
 		Pointers bool              `json:"pointers"`
 		Swap     map[string]string `json:"swap"`
 		Json     struct {
