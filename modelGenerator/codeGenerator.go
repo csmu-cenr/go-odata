@@ -43,91 +43,7 @@ func addPackageNameToExtra(packageLine string, extraPath string) (string, error)
 }
 
 func publicAttribute(property string) string {
-
-	// Split the string by underscores
-	segments := strings.Split(property, "_")
-
-	// Capitalize the first letter of each segment
-	for i := range segments {
-		segments[i] = strings.Title(segments[i])
-	}
-
-	// Join the segments back together
-	result := strings.Join(segments, "")
-
-	return result
-}
-
-func (g *Generator) validPropertyName(property string) bool {
-	for _, ignore := range g.Fields.Ignore.StartsWith {
-		if strings.HasPrefix(property, ignore) {
-			return false
-		}
-	}
-	for _, ignore := range g.Fields.Ignore.Contains {
-		if strings.Contains(property, ignore) {
-			return false
-		}
-	}
-	for _, ignore := range g.Fields.Ignore.EndsWith {
-		if strings.HasSuffix(property, ignore) {
-			return false
-		}
-	}
-	for _, ignore := range g.Fields.Ignore.Equals {
-		if property == ignore {
-			return false
-		}
-	}
-	return true
-}
-
-func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
-
-	publicName := publicAttribute(entityType.Name)
-	structString := fmt.Sprintf("type %s struct {", publicName)
-	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
-
-	jsonSupport := ""
-	name := ""
-
-	for _, extra := range g.Fields.Extras {
-		structString += fmt.Sprintf("\n\t%s", extra)
-	}
-	structString += "\n"
-
-	for _, propertyKey := range propertyKeys {
-		include := g.validPropertyName(propertyKey)
-		if include {
-			prop := entityType.Properties[propertyKey]
-			name = prop.Name
-			if g.Fields.Public {
-				name = publicAttribute(name)
-			}
-			if g.Fields.Json.Tags {
-				jsonSupport = prop.Name
-				if g.Fields.Json.OmitEmpty {
-					jsonSupport += ",omitempty"
-				}
-				jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
-			}
-			pointer := ""
-			if g.Fields.Pointers {
-				pointer = "*"
-			}
-			goType := prop.goType()
-			if value, ok := g.Fields.Swap[goType]; ok {
-				goType = value
-			}
-			structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
-		}
-	}
-	structString += "\n}\n\n"
-	structString += fmt.Sprintf("type\t%sAlias\t[]%s\n", publicName, publicName)
-	structString += fmt.Sprintf("type\t%sAsc\t[]%s\n", publicName, publicName)
-	structString += fmt.Sprintf("type\t%sDesc\t[]%s\n", publicName, publicName)
-
-	return structString
+	return snakeCaseToTitleCase(property)
 }
 
 func generateModelDefinition(set edmxEntitySet) string {
@@ -137,46 +53,6 @@ func generateModelDefinition(set edmxEntitySet) string {
 func New%sCollection(wrapper odataClient.Wrapper) odataClient.ODataModelCollection[%s] {
 	return modelDefinition[%s]{client: wrapper.ODataClient(), name: "%s", url: "%s"}
 }`, publicName, publicName, publicName, publicName, set.Name)
-}
-
-func generateEnumStruct(enum edmxEnumType) string {
-	stringValues := map[string]string{}
-	intValues := map[int64]string{}
-	isIntValues := true
-
-	for _, member := range enum.Members {
-		stringValues[member.Name] = member.Value
-		i, err := strconv.ParseInt(member.Value, 10, 64)
-		if err != nil {
-			isIntValues = false
-		} else {
-			intValues[i] = member.Name
-		}
-	}
-
-	goType := "string"
-	if isIntValues {
-		goType = "int64"
-	}
-	goString := fmt.Sprintf(`type %s %s
-
-const (`, enum.Name, goType)
-
-	if isIntValues {
-		intKeys := sortedKeys(intValues)
-		for _, i := range intKeys {
-			key := intValues[i]
-			goString += fmt.Sprintf("\n\t%s %s = %d", key, enum.Name, i)
-		}
-	} else {
-		stringKeys := sortedCaseInsensitiveStringKeys(stringValues)
-		for _, key := range stringKeys {
-			str := stringValues[key]
-			goString += fmt.Sprintf("\n\t%s %s = \"%s\"", key, enum.Name, str)
-		}
-	}
-
-	return goString + "\n)"
 }
 
 func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxDataServices) map[string]string {
@@ -342,16 +218,16 @@ import (
 
 		for _, name := range names {
 			set := schema.EntitySets[name]
+			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
+			deleteCode += "\n" + generateDeleteCode(set, "client", "odataClient") + "\n"
+			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
+			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
 			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
 			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
+			saveCode += "\n" + generateSaveCode(set) + "\n"
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
 			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
-			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
-			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient", g.Fields.Quoted) + "\n"
-			insertCode += "\n" + generateInsertCode(set, "client", "odataClient", g.Fields.Quoted) + "\n"
-			saveCode += "\n" + generateSaveCode(set, g.Fields.Quoted) + "\n"
-			deleteCode += "\n" + generateDeleteCode(set, "client", "odataClient") + "\n"
+			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
 		}
 	}
 
@@ -409,6 +285,134 @@ import (
 	return code
 }
 
+func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\n", g.Package.FieldsPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\nconst (", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+
+			set := schema.EntitySets[name]
+			entityType := set.getEntityType()
+
+			result = fmt.Sprintf("%s\n\n\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
+
+			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+			for _, property := range propertyKeys {
+				if g.validPropertyName(property) {
+					result = fmt.Sprintf("%s\n\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
+				}
+			}
+		}
+		result = fmt.Sprintf("%s\n\n)\n", result)
+	}
+	result = strings.Trim(result, "\n")
+	return result
+}
+
+func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
+
+	publicName := publicAttribute(entityType.Name)
+	structString := fmt.Sprintf("type %s struct {", publicName)
+	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+	jsonSupport := ""
+	name := ""
+
+	for _, extra := range g.Fields.Extras {
+		structString += fmt.Sprintf("\n\t%s", extra)
+	}
+	structString += "\n"
+
+	for _, propertyKey := range propertyKeys {
+		include := g.validPropertyName(propertyKey)
+		if include {
+			prop := entityType.Properties[propertyKey]
+			name = prop.Name
+			if g.Fields.Public {
+				name = publicAttribute(name)
+			}
+			if g.Fields.Json.Tags {
+				jsonSupport = prop.Name
+				if g.Fields.Json.OmitEmpty {
+					jsonSupport += ",omitempty"
+				}
+				jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
+			}
+			pointer := ""
+			if g.Fields.Pointers {
+				pointer = "*"
+			}
+			goType := prop.goType()
+			if value, ok := g.Fields.Swap[goType]; ok {
+				goType = value
+			}
+			structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
+		}
+	}
+	structString += "\n}\n\n"
+	structString += fmt.Sprintf("type\t%sAlias\t[]%s\n", publicName, publicName)
+	structString += fmt.Sprintf("type\t%sAsc\t[]%s\n", publicName, publicName)
+	structString += fmt.Sprintf("type\t%sDesc\t[]%s\n", publicName, publicName)
+
+	return structString
+}
+
+func (g *Generator) generateTableConstants(dataService edmxDataServices) string {
+	result := fmt.Sprintf("package %s\r", g.Package.TablesPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\nconst (\n", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+			result = fmt.Sprintf("%s\n\t%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(name), "_"), name)
+		}
+		result = fmt.Sprintf("%s\n)", result)
+	}
+	result = strings.Trim(result, "\n")
+	return result
+
+}
+
+// validPropertyName removes fields based on the ignore section of the config.json file.
+func (g *Generator) validPropertyName(property string) bool {
+	for _, ignore := range g.Fields.Ignore.StartsWith {
+		if strings.HasPrefix(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.Contains {
+		if strings.Contains(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.EndsWith {
+		if strings.HasSuffix(property, ignore) {
+			return false
+		}
+	}
+	for _, ignore := range g.Fields.Ignore.Equals {
+		if property == ignore {
+			return false
+		}
+	}
+	return true
+}
+
 func generateDataSet(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
@@ -453,44 +457,51 @@ func generateDeleteCode(set edmxEntitySet, client string, packageName string) st
 
 }
 
-func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
-	result := fmt.Sprintf("package %s\n", g.Package.FieldsPackageName)
+func generateEnumStruct(enum edmxEnumType) string {
+	stringValues := map[string]string{}
+	intValues := map[int64]string{}
+	isIntValues := true
 
-	for _, schema := range dataService.Schemas {
-		result = fmt.Sprintf("%s\nconst (", result)
-		var names []string
-		for name := range schema.EntitySets {
-			names = append(names, name)
+	for _, member := range enum.Members {
+		stringValues[member.Name] = member.Value
+		i, err := strconv.ParseInt(member.Value, 10, 64)
+		if err != nil {
+			isIntValues = false
+		} else {
+			intValues[i] = member.Name
 		}
-		sort.Slice(names, func(i, j int) bool {
-			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
-		})
-		for _, name := range names {
-
-			set := schema.EntitySets[name]
-			entityType := set.getEntityType()
-
-			result = fmt.Sprintf("%s\n\n\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
-
-			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
-
-			for _, property := range propertyKeys {
-				if g.validPropertyName(property) {
-					result = fmt.Sprintf("%s\n\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
-				}
-			}
-		}
-		result = fmt.Sprintf("%s\n\n)\n", result)
 	}
-	result = strings.Trim(result, "\n")
-	return result
 
+	goType := "string"
+	if isIntValues {
+		goType = "int64"
+	}
+	goString := fmt.Sprintf(`type %s %s
+
+const (`, enum.Name, goType)
+
+	if isIntValues {
+		intKeys := sortedKeys(intValues)
+		for _, i := range intKeys {
+			key := intValues[i]
+			goString += fmt.Sprintf("\n\t%s %s = %d", key, enum.Name, i)
+		}
+	} else {
+		stringKeys := sortedCaseInsensitiveStringKeys(stringValues)
+		for _, key := range stringKeys {
+			str := stringValues[key]
+			goString += fmt.Sprintf("\n\t%s %s = \"%s\"", key, enum.Name, str)
+		}
+	}
+
+	return goString + "\n)"
 }
 
-func generateInsertCode(set edmxEntitySet, client string, packageName string, quoted bool) string {
+func generateInsertCode(set edmxEntitySet, client string, packageName string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
+	instance := snakeCaseToCamelCase(publicName)
 
 	result := `func ({{type}} *{{publicName}}) Insert(headers map[string]string, link string) ({{publicName}}, error) {
 
@@ -504,10 +515,10 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string, qu
 	modifiedFields := ModifiedFields({{type}})
 	selectedFields := SelectedFields({{type}},false)
 
-	result, err := dataset.Insert(*{{type}}, modifiedFields, {{quoted}})
+	result, err := dataset.Insert(*{{type}}, modifiedFields)
 	if err != nil {
 		m := ErrorMessage{
-			Attempted:  DATASET_UPDATE,
+			Attempted:  "{{instance}}.Insert",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
 			InnerError: err,
@@ -533,167 +544,11 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string, qu
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
 	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{instance}}", instance)
 
 	runes := []rune(publicName)
 	firstLower := unicode.ToLower(runes[0])
 	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
-
-	if quoted {
-		result = strings.ReplaceAll(result, "{{quoted}}", TRUE)
-	} else {
-		result = strings.ReplaceAll(result, "{{quoted}}", FALSE)
-	}
-
-	return result
-
-}
-
-func generateSaveCode(set edmxEntitySet, quoted bool) string {
-
-	entityType := set.getEntityType()
-	publicName := publicAttribute(entityType.Name)
-	result := `func ({{type}} *{{publicName}}) Save(headers map[string]string, link string) ({{publicName}}, error) {
-	if !{{type}}.Modified(){
-		return *{{type}}, nil
-	} 
-	if {{type}}.ODataEditLink == NOTHING {
-		return {{type}}.Insert(headers, link)
-	}
-	return {{type}}.Update(headers, link)
-}
-
-func ({{type}} *{{publicName}}) Modified() bool {
-	return Modified({{type}})
-}
-
-func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string) ([]{{publicName}}, error) {
-	result := []{{publicName}}{}
-	
-	{{publicName}}Slice := []{{publicName}}(alias)
-	for _, {{type}} := range {{publicName}}Slice {
-		{{type}}.Save(headers, link)
-		result = append(result, {{type}})
-	}
-	
-	return result, nil
-}
-
-func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
-	result := []byte{}
-	
-	data, err := StructListToMapList(alias, fields)
-	if err != nil {
-		m := ErrorMessage{
-			Attempted:  "PersistentAlias.StructListToMapList",
-			Details:    fmt.Sprintf("%+v", err),
-			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
-		}
-		return result, m
-	}
-	result, err = json.Marshal(data)
-	if err != nil {
-		m := ErrorMessage{
-			Attempted:  "PersistentAlias.Marshal",
-			Details:    fmt.Sprintf("%+v", err),
-			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
-		}
-		return result, m
-	}
-	
-	return result, nil
-}
-
-`
-
-	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-
-	runes := []rune(publicName)
-	firstLower := unicode.ToLower(runes[0])
-	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
-
-	return result
-}
-
-func (g *Generator) generateTableConstants(dataService edmxDataServices) string {
-	result := fmt.Sprintf("package %s\r", g.Package.TablesPackageName)
-
-	for _, schema := range dataService.Schemas {
-		result = fmt.Sprintf("%s\nconst (\n", result)
-		var names []string
-		for name := range schema.EntitySets {
-			names = append(names, name)
-		}
-		sort.Slice(names, func(i, j int) bool {
-			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
-		})
-		for _, name := range names {
-			result = fmt.Sprintf("%s\n\t%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(name), "_"), name)
-		}
-		result = fmt.Sprintf("%s\n)", result)
-	}
-	result = strings.Trim(result, "\n")
-	return result
-
-}
-
-func generateUpdateCode(set edmxEntitySet, client string, packageName string, quoted bool) string {
-
-	entityType := set.getEntityType()
-	publicName := publicAttribute(entityType.Name)
-
-	result := `func ({{type}} *{{publicName}}) Update(headers map[string]string, link string) ({{publicName}}, error) {
-
-		{{client}} := {{packageName}}.New(link)
-		for key, value := range headers {
-			{{client}}.AddHeader(key, value)
-		}
-	
-		collection := New{{publicName}}Collection({{client}})
-		dataset := collection.DataSet()
-
-		modifiedFields := ModifiedFields({{type}})
-		selectedFields := SelectedFields({{type}},false)
-
-		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields, {{quoted}})
-		if err != nil {
-			m := ErrorMessage{
-				Attempted:  DATASET_UPDATE,
-				Details:    fmt.Sprintf("%+v", err),
-				ErrorNo:    http.StatusInternalServerError,
-				InnerError: err,
-				Message:    UNEXPECTED_ERROR,
-			}
-			return result, m
-		}
-		err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
-		if err != nil {
-			m := ErrorMessage{
-				Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
-				Details:    fmt.Sprintf("%+v", err),
-				ErrorNo:    http.StatusInternalServerError,
-				InnerError: err,
-				Message:    UNEXPECTED_ERROR,
-			}
-			return result, m
-		}
-		return result, err
-	}`
-
-	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
-
-	runes := []rune(publicName)
-	firstLower := unicode.ToLower(runes[0])
-	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
-
-	if quoted {
-		result = strings.ReplaceAll(result, "{{quoted}}", TRUE)
-	} else {
-		result = strings.ReplaceAll(result, "{{quoted}}", FALSE)
-	}
 
 	return result
 
@@ -770,6 +625,138 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 	}
 	`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	return result
+}
+
+func generateSaveCode(set edmxEntitySet) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	result := `// {{publicName}}.Save determines whether to save or creates a record at the link provided the authentication provided in headers is valid.
+	func ({{type}} *{{publicName}}) Save(headers map[string]string, link string) ({{publicName}}, error) {
+
+	// Check if anything has changed. Bounce out.
+	if !{{type}}.Modified(){
+		return *{{type}}, nil
+	} 
+
+	// Check if {{publicName}} has an edit link. If not try to created.
+	if {{type}}.ODataEditLink == NOTHING {
+		return {{type}}.Insert(headers, link)
+	}
+
+	// Save {{publicName}}
+	return {{type}}.Update(headers, link)
+}
+
+func ({{type}} *{{publicName}}) Modified() bool {
+	return Modified({{type}})
+}
+
+func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string) ([]{{publicName}}, error) {
+	result := []{{publicName}}{}
+	
+	{{publicName}}Slice := []{{publicName}}(alias)
+	for _, {{type}} := range {{publicName}}Slice {
+		{{type}}.Save(headers, link)
+		result = append(result, {{type}})
+	}
+	
+	return result, nil
+}
+
+func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
+	result := []byte{}
+	
+	data, err := StructListToMapList(alias, fields)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "PersistentAlias.StructListToMapList",
+			Details:    fmt.Sprintf("%+v", err),
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
+	result, err = json.Marshal(data)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "PersistentAlias.Marshal",
+			Details:    fmt.Sprintf("%+v", err),
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return result, m
+	}
+	
+	return result, nil
+}
+
+`
+
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+
+	return result
+}
+
+func generateUpdateCode(set edmxEntitySet, client string, packageName string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+	instance := snakeCaseToCamelCase(publicName)
+
+	result := `// {{publicName}}.Update saves the record at the link provided the authentication provided in headers is valid.
+	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string) ({{publicName}}, error) {
+
+		{{client}} := {{packageName}}.New(link)
+		for key, value := range headers {
+			{{client}}.AddHeader(key, value)
+		}
+	
+		collection := New{{publicName}}Collection({{client}})
+		dataset := collection.DataSet()
+
+		modifiedFields := ModifiedFields({{type}})
+		selectedFields := SelectedFields({{type}},false)
+
+		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields)
+		if err != nil {
+			m := ErrorMessage{
+				Attempted:  "{{instance}}.Update",
+				Details:    fmt.Sprintf("%+v", err),
+				ErrorNo:    http.StatusInternalServerError,
+				InnerError: err,
+				Message:    UNEXPECTED_ERROR,
+			}
+			return result, m
+		}
+		err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
+		if err != nil {
+			m := ErrorMessage{
+				Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
+				Details:    fmt.Sprintf("%+v", err),
+				ErrorNo:    http.StatusInternalServerError,
+				InnerError: err,
+				Message:    UNEXPECTED_ERROR,
+			}
+			return result, m
+		}
+		return result, err
+	}`
+
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{instance}}", instance)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+
 	return result
 }
 
@@ -893,4 +880,51 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 
 	return result
 
+}
+
+// snakeCaseToCamelCase converts a snake_case string to camelCase
+func snakeCaseToCamelCase(snake string) string {
+	var camelCase string
+	upperNext := false
+
+	for i, char := range snake {
+		if char == '_' {
+			upperNext = true
+		} else {
+			if upperNext || i == 0 {
+				camelCase += string(unicode.ToUpper(char))
+				upperNext = false
+			} else {
+				camelCase += string(char)
+			}
+		}
+	}
+
+	// Convert the first character to lowercase to ensure camelCase format
+	if len(camelCase) > 0 {
+		camelCase = strings.ToLower(camelCase[:1]) + camelCase[1:]
+	}
+
+	return camelCase
+}
+
+// snakeCaseToCamelCase converts a snake_case string to camelCase
+func snakeCaseToTitleCase(snake string) string {
+	var TitleCase string
+	upperNext := false
+
+	for i, char := range snake {
+		if char == '_' {
+			upperNext = true
+		} else {
+			if upperNext || i == 0 {
+				TitleCase += string(unicode.ToUpper(char))
+				upperNext = false
+			} else {
+				TitleCase += string(char)
+			}
+		}
+	}
+
+	return TitleCase
 }

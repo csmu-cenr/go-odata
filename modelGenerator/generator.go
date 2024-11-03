@@ -23,27 +23,26 @@ type Generator struct {
 	ApiUrl  string `json:"apiUrl"`
 	Package struct {
 		CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
+		Datasets                 string `json:"datasets"`
+		Delete                   string `json:"delete"`
+		DeleteWhere              string `json:"deleteWhere"`
 		Directory                string `json:"directory"`
+		Extras                   string `json:"extras"`
 		FieldsConstants          string `json:"fieldsConstants"`
 		FieldsPackageName        string
+		Insert                   string `json:"insert"`
+		Maps                     string `json:"maps"`
+		Models                   string `json:"models"`
+		Save                     string `json:"save"`
+		Select                   string `json:"select"`
+		SelectByTableName        string `json:"selectByTableName"`
 		TablesConstants          string `json:"tablesConstants"`
 		TablesPackageName        string
-		Extras                   string `json:"extras"`
-		Models                   string `json:"models"`
-		SelectByTableName        string `json:"selectByTableName"`
-		Select                   string `json:"select"`
-		Datasets                 string `json:"datasets"`
-		Maps                     string `json:"maps"`
 		Update                   string `json:"update"`
-		Insert                   string `json:"insert"`
-		Delete                   string `json:"delete"`
-		Save                     string `json:"save"`
 		UpdateWhere              string `json:"updateWhere"`
-		DeleteWhere              string `json:"deleteWhere"`
 	} `json:"package"`
 	Fields struct {
 		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName
-		Quoted   bool              `json:"quoted"`
 		Pointers bool              `json:"pointers"`
 		Swap     map[string]string `json:"swap"`
 		Json     struct {
