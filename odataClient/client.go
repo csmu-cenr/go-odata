@@ -62,6 +62,7 @@ func getFullURL(req *http.Request) string {
 }
 
 type ODataQueryOptions struct {
+	Table   string `json:"table,omitempty"`
 	Select  string `json:"select,omitempty"`
 	Filter  string `json:"filter,omitempty"`
 	Count   string `json:"count,omitempty"`
