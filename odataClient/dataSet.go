@@ -130,15 +130,6 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 	return options
 }
 
-func ConvertInterfaceToBytes(data interface{}) ([]byte, error) {
-	// Use json.Marshal to convert the interface to a JSON-formatted byte slice
-	bytes, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("error converting interface to bytes: %v", err)
-	}
-	return bytes, nil
-}
-
 func (options ODataQueryOptions) ToQueryString() string {
 	queryStrings := url.Values{}
 	if options.Select != NOTHING {
