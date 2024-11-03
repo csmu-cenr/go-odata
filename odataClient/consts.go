@@ -7,6 +7,7 @@ const (
 	COMMA               = `,`
 	COUNT               = `$count`
 	CROSSJOIN           = `$crossjoin`
+	DEQUOTE             = `dequote`
 	DOUBLE_SINGLE_QUOTE = `''`
 	EXPAND              = `$expand`
 	FILTER              = `$filter`
@@ -24,7 +25,10 @@ const (
 	REF                 = `$ref`
 	RIGHT_BRACKET       = `)`
 	SELECT              = `$select`
+	SINGLE_DOUBLE_QUOTE = `"`
 	SKIP                = `$skip`
+	QUOTE               = `quote`
+	QUOTED              = `quoted`
 	TOP                 = `$top`
 	TRUE                = `true`
 	UNEXPECTED_ERROR    = `unexpected error`
