@@ -7,7 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
+)
+
+const (
+	SELECTED = `Selected`
 )
 
 type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
@@ -19,8 +24,8 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Single(id string, options ODataQueryOptions) (ModelT, error)
 	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT, fields []string, quoted bool) (ModelT, error)
-	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string, quoted bool) (ModelT, error)
+	Insert(model ModelT, fields []string) (ModelT, error)
+	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
 	UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
@@ -38,7 +43,49 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
 
-	options.Select = values.Get(SELECT)
+	// Determine if the field names should be quoted
+	if values.Has(QUOTED) {
+		options.Quoted = values.Get(QUOTED) == TRUE
+	} else {
+		options.Quoted = true
+	}
+
+	// Quote the field names if requested
+	if options.Quoted {
+		options.Select = quoteCommaDelimited(values.Get(SELECT))
+	} else {
+		options.Select = values.Get(SELECT)
+	}
+
+	// Quote any fields in values["quote"]
+	if values.Has(QUOTE) {
+		found := false
+		out := []string{}
+		quote := values[QUOTE]
+		fields := strings.Split(options.Select, COMMA)
+		for _, f := range fields {
+			if isDoubleQuoted(f) {
+				out = append(out, f)
+				continue
+			}
+			found = stringSliceContains(quote, f)
+			if !found {
+				out = append(out, f)
+				continue
+			}
+			out = append(out, fmt.Sprintf(`"%s"`, f))
+		}
+		options.Select = strings.Join(out, COMMA)
+	}
+
+	// Remove quotes from fields that the odata provider rejects.
+	if values.Has(DEQUOTE) {
+		dequote := values[DEQUOTE]
+		for _, v := range dequote {
+			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
+		}
+	}
+
 	options.Count = values.Get(COUNT)
 	options.Top = values.Get(TOP)
 	options.Skip = values.Get(SKIP)
@@ -64,6 +111,13 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		} else {
 			options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
 		}
+	}
+
+	// Quote the filter if options.Quoted
+	if options.Filter != NOTHING && values.Has(QUOTE) {
+		fields := []string{}
+		fields = append(fields, values[QUOTE]...)
+		options.Filter = quoteODataFields(options.Filter, fields)
 	}
 
 	format := values.Get((FORMAT))
@@ -124,13 +178,14 @@ func (options ODataQueryOptions) ToQueryString() string {
 		queryStrings.Add(ODATAREADLINK, options.ODataReadLink)
 	}
 	result := queryStrings.Encode()
-	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
+	result = strings.ReplaceAll(result, "%22", `"`) // %22 can stop odata from seeing the field name. swap back to "
 	result = strings.ReplaceAll(result, "%24", "$") // sometimes %24 is not recognised as $ - make it explicitly $
-	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
-	result = strings.ReplaceAll(result, "%2F", "/") // %3D stops odata from seeing table identifiers swap back to slashes
 	result = strings.ReplaceAll(result, "%28", "(") // %28 can stop odata from seeing bracketed code swap back to (
 	result = strings.ReplaceAll(result, "%29", ")") // %29 can stop odata from seeing bracketed code swap back to )
+	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
+	result = strings.ReplaceAll(result, "%2F", "/") // %2F stops odata from seeing table identifiers swap back to slashes
 	result = strings.ReplaceAll(result, "%3D", "=") // %3D can stop odata from seeing equal signs swap back to =
+	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
 	return result
 }
 
@@ -326,6 +381,42 @@ func isFieldExported(field reflect.StructField) bool {
 	return field.PkgPath == ""
 }
 
+// isDoubleQuoted checks if the first and last characters of the string are double quotes.
+func isDoubleQuoted(field string) bool {
+	// Must be at least 3 characters long to be quoted
+	if len(field) < 2 {
+		return false
+	}
+
+	// Get the first and last characters
+	first := rune(field[0])
+	last := rune(field[len(field)-1])
+
+	// Return true if both are double quotes
+	return first == '"' && last == '"'
+}
+
+// isNotDoubleQuoted inverts isDoubleQuoted
+func isNotDoubleQuoted(field string) bool {
+	return !isDoubleQuoted(field)
+}
+
+// quoteCommaDelimited turns a comma delimited string into a double quoted comma delimited string.
+// Such that 1,"2",3,4,""5"" is returned as "1","2","3","4","5"
+func quoteCommaDelimited(input string) string {
+	// Split the string by commas
+	parts := strings.Split(input, ",")
+
+	// Process each part, strip existing quotes and enclose in double quotes
+	for i, part := range parts {
+		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
+		parts[i] = fmt.Sprintf(`"%s"`, part)
+	}
+
+	// Join the parts back together with commas
+	return strings.Join(parts, ",")
+}
+
 func StructToAny(data interface{}, fields []string) (interface{}, error) {
 	result, err := StructToMap(data, fields)
 	if err != nil {
@@ -429,6 +520,40 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 	return result, nil
 }
 
+// quoteODataFields takes an OData filter string and quotes the specified field names in the fields slice.
+func quoteODataFields(query string, fields []string) string {
+	// List of OData operations that involve fields
+	operations := []string{"eq", "ne", "gt", "ge", "lt", "le", "and", "or"}
+
+	// Create a regex pattern to match field names before any operation
+	fieldPattern := strings.Join(fields, "|")
+
+	// Compile a regex to find fields followed by operations, handling optional parentheses and spaces
+	regex := regexp.MustCompile(`(?i)\(?\s*(\b(` + fieldPattern + `)\b)\s*(eq|ne|gt|ge|lt|le|and|or)\s*`)
+
+	// Replace matched fields with quoted field names, ensuring spaces are wrapped around every element
+	quotedQuery := regex.ReplaceAllStringFunc(query, func(match string) string {
+		for _, operation := range operations {
+			if strings.Contains(strings.ToLower(match), operation) {
+				// Split the match into parts (field and operator)
+				parts := strings.Fields(match)
+				if len(parts) >= 2 {
+					// Add spaces around field name and operator
+					return fmt.Sprintf(" \"%s\" %s ", parts[0], strings.Join(parts[1:], " "))
+				}
+			}
+		}
+		return match
+	})
+
+	// Replace any occurrences of multiple spaces with a single space
+	for strings.Contains(quotedQuery, "  ") {
+		quotedQuery = strings.ReplaceAll(quotedQuery, "  ", " ")
+	}
+
+	return quotedQuery
+}
+
 // removeEmptyKeys resolves an issue when the odata source sends back an invalid editlink with an empty string key
 func removeEmptyKeys(requestUrl string) string {
 
@@ -449,8 +574,18 @@ func removeEmptyKeys(requestUrl string) string {
 	return requestUrl
 }
 
+// stringSliceContains checks if a string slice stringSliceContains a specific element
+func stringSliceContains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
 // Insert a model to the API
-func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, quoted bool) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) Insert`
 
@@ -460,13 +595,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, q
 	if err != nil {
 		return result, err
 	}
-	if quoted {
-		quotedMap := map[string]interface{}{}
-		for k, v := range modelMap {
-			quotedMap[fmt.Sprintf(`"%s"`, k)] = v
-		}
-		modelMap = quotedMap
-	}
+
 	data, err := json.Marshal(modelMap)
 	if err != nil {
 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
@@ -478,6 +607,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, q
 			Details:    fmt.Sprintf(`%+v`, err)}
 		return result, message
 	}
+
 	request, err := http.NewRequest("POST", requestUrl, bytes.NewReader(data))
 	if err != nil {
 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
@@ -489,6 +619,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, q
 			Details:    fmt.Sprintf(`%+v`, err)}
 		return result, message
 	}
+
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
 
@@ -496,8 +627,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string, q
 }
 
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string, quoted bool) (ModelT, error) {
-
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
 	functionName := `odataDataSet[ModelT, Def]) Update`
 
 	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
@@ -507,13 +637,7 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 	if err != nil {
 		return result, err
 	}
-	if quoted {
-		quotedMap := map[string]interface{}{}
-		for k, v := range modelMap {
-			quotedMap[fmt.Sprintf(`"%s"`, k)] = v
-		}
-		modelMap = quotedMap
-	}
+
 	data, err := json.Marshal(modelMap)
 	if err != nil {
 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
@@ -524,6 +648,7 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 			Details: fmt.Sprintf(`%+v`, err)}
 		return result, message
 	}
+
 	request, err := http.NewRequest("PATCH", requestUrl, bytes.NewReader(data))
 	if err != nil {
 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
@@ -534,6 +659,7 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields 
 			Details: fmt.Sprintf(`%+v`, err)}
 		return result, message
 	}
+
 	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
 	request.Header.Set("Prefer", "return=representation")
 
