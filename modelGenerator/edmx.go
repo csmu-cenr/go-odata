@@ -228,8 +228,8 @@ func parseEdmx(xmlData []byte) (edmxDataServices, error) {
 		return edmxDataServices{}, err
 	}
 
-	if edmxData.Version != "4.0" {
-		return edmxDataServices{}, fmt.Errorf("only version 4.0 is supported, got %s", edmxData.Version)
+	if edmxData.Version != "4.0" && edmxData.Version != "4.01" {
+		return edmxDataServices{}, fmt.Errorf("only version 4.0 and 4.01 are supported, got %s", edmxData.Version)
 	}
 
 	if len(edmxData.DataServices) != 1 {
