@@ -85,6 +85,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -96,6 +97,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 `, packageName)
@@ -160,6 +162,10 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	import (
 		"encoding/json"
 		"fmt"
+		"net/http"
+		"reflect"
+
+		"github.com/Uffe-Code/go-nullable/nullable"
 	)
 
 `, packageName)
@@ -182,6 +188,7 @@ import (
 	"net/url"
 	"reflect"
 
+	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
@@ -512,8 +519,8 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 	
 	collection := New{{publicName}}Collection({{client}})
 	dataset := collection.DataSet()
-	modifiedFields := ModifiedFields({{type}})
-	selectedFields := SelectedFields({{type}},false)
+	modifiedFields := nullable.ModifiedFields({{type}})
+	selectedFields := nullable.SelectedFields({{type}},false)
 
 	result, err := dataset.Insert(*{{type}}, modifiedFields)
 	if err != nil {
@@ -526,7 +533,7 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 		}
 		return result, m
 	}
-	err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
+	err = nullable.SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
 	if err != nil {
 		m := ErrorMessage{
 			Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
@@ -650,7 +657,7 @@ func generateSaveCode(set edmxEntitySet) string {
 }
 
 func ({{type}} *{{publicName}}) Modified() bool {
-	return Modified({{type}})
+	return nullable.Modified({{type}})
 }
 
 func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string) ([]{{publicName}}, error) {
@@ -692,6 +699,24 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 	return result, nil
 }
 
+func ({{type}} *{{publicName}}) SetModifiedToSelected() error {
+
+	selectedFields := nullable.SelectedFields({{type}}, false)
+	err := nullable.SetModifiedBooleanFields(reflect.ValueOf({{type}}), selectedFields, true, true)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "SetModifiedToSelected",
+			Details:    fmt.Sprintf("%+v", err),
+			ErrorNo:    http.StatusInternalServerError,
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return m
+	}
+	return nil
+
+}
+
 `
 
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
@@ -720,8 +745,8 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
 
-		modifiedFields := ModifiedFields({{type}})
-		selectedFields := SelectedFields({{type}},false)
+		modifiedFields := nullable.ModifiedFields({{type}})
+		selectedFields := nullable.SelectedFields({{type}},false)
 
 		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields)
 		if err != nil {
@@ -734,7 +759,7 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 			}
 			return result, m
 		}
-		err = SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
+		err = nullable.SetSelectedBooleanFields(reflect.ValueOf(&result), selectedFields, true, true)
 		if err != nil {
 			m := ErrorMessage{
 				Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
@@ -771,10 +796,10 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	// value is the desired value for {{publicName}}Selected.
 	// invert if set to true sets {{publicName}}Selected to the !value if the tag is not found in fields.
 	func({{type}} *{{publicName}})SetSelected(fields []string, value bool, not bool) error {
-		err := SetSelectedBooleanFields(reflect.ValueOf({{type}}), fields, value, not)
+		err := nullable.SetSelectedBooleanFields(reflect.ValueOf({{type}}), fields, value, not)
 		if err != nil {
 			m := ErrorMessage{
-				Attempted: "SetSelectedBooleanFields",
+				Attempted: "nullable.SetSelectedBooleanFields",
 				Details: fmt.Sprintf("%+v",err),
 				ErrorNo: http.StatusInternalServerError,
 				Message: UNEXPECTED_ERROR,
