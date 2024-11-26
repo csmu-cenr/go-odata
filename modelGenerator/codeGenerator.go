@@ -717,6 +717,26 @@ func ({{type}} *{{publicName}}) SetModifiedToSelected() error {
 
 }
 
+func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base {{publicName}}) error {
+
+	err := nullable.SetModifiedIfDifferent(reflect.ValueOf(&{{type}}), reflect.ValueOf(&base))
+
+	if err != nil {
+		m := ErrorMessage{
+			Attempted:  "SetModifiedToSelected",
+			Details:    fmt.Sprintf("%+v", err),
+			ErrorNo:    http.StatusInternalServerError,
+			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
+		}
+		return m
+	}
+	return nil
+
+}
+
+
+
 `
 
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
