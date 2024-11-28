@@ -519,8 +519,8 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 	
 	collection := New{{publicName}}Collection({{client}})
 	dataset := collection.DataSet()
-	modifiedFields := nullable.ModifiedFields({{type}})
-	selectedFields := nullable.SelectedFields({{type}},false)
+	modifiedFields := nullable.GetModifiedTags({{type}})
+	selectedFields := nullable.GetSelectedTags({{type}},false)
 
 	result, err := dataset.Insert(*{{type}}, modifiedFields)
 	if err != nil {
@@ -701,7 +701,7 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 
 func ({{type}} *{{publicName}}) SetModifiedToSelected() error {
 
-	selectedFields := nullable.SelectedFields({{type}}, false)
+	selectedFields := nullable.GetSelectedTags({{type}}, false)
 	err := nullable.SetModifiedBooleanFields(reflect.ValueOf({{type}}), selectedFields, true, true)
 	if err != nil {
 		m := ErrorMessage{
@@ -717,16 +717,20 @@ func ({{type}} *{{publicName}}) SetModifiedToSelected() error {
 
 }
 
-func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base {{publicName}}) error {
+func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base *{{publicName}}) error {
 
-	err := nullable.SetModifiedIfDifferent(reflect.ValueOf(&{{type}}), reflect.ValueOf(&base))
+	function := "dataModel.{{publicName}}.SetModifiedIfDifferent"
+
+	err := nullable.SetModifiedIfDifferent(reflect.ValueOf({{type}}), reflect.ValueOf(base))
 
 	if err != nil {
+		e,_ := err.(nullable.ErrorMessage) 
 		m := ErrorMessage{
-			Attempted:  "SetModifiedToSelected",
-			Details:    fmt.Sprintf("%+v", err),
-			ErrorNo:    http.StatusInternalServerError,
+			Attempted:  "SetModifiedIfDifferent",
+			Details:    e.Details,
+			ErrorNo:    e.ErrorNo,
 			InnerError: err,
+			Function:   function,
 			Message:    UNEXPECTED_ERROR,
 		}
 		return m
@@ -735,7 +739,9 @@ func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base {{publicName}}) erro
 
 }
 
-
+func ({{type}} *{{publicName}}) GetModifiedTags() []string {
+	return nullable.GetModifiedTags({{type}})
+}
 
 `
 
@@ -765,8 +771,8 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
 
-		modifiedFields := nullable.ModifiedFields({{type}})
-		selectedFields := nullable.SelectedFields({{type}},false)
+		modifiedFields := nullable.GetModifiedTags({{type}})
+		selectedFields := nullable.GetSelectedTags({{type}},false)
 
 		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields)
 		if err != nil {
@@ -829,29 +835,29 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return nil
 	}
 
-	func {{publicName}}SelectSingle(defaultFilter string, urlValues url.Values, headers map[string]string, link string) ({{publicName}}, error) {
-		models, err := {{publicName}}SelectList(defaultFilter, urlValues, headers, link)
+	func {{publicName}}SelectSingle(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
+		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
 		if err != nil {
 			return {{publicName}}{}, err
 		}
 		if len(models) == 0 {
 			filter := defaultFilter
-			if urlValues.Get(FILTER) != "" {
-				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, urlValues.Get(FILTER))
+			if values.Get(FILTER) != "" {
+				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, values.Get(FILTER))
 			}
 			return {{publicName}}{}, NilModel{Model: "{{publicName}}", Filter: filter}
 		}
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, urlValues url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
+	func {{publicName}}SelectList(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
 			{{client}}.AddHeader(key, value)
 		}
 		options := {{client}}.ODataQueryOptions()
-		options = options.ApplyArguments(defaultFilter, urlValues)
+		options = options.ApplyArguments(defaultFilter, values)
 	
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()

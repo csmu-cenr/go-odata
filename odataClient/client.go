@@ -155,6 +155,7 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 	}
 }
 
+// executeHttpRequest
 func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
 
 	functionName := `executeHttpRequest`

@@ -21,14 +21,15 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 }
 
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
+	Get(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
+	Delete(id string) error
+	DeleteByFilter(options ODataQueryOptions) error
 	Single(id string, options ODataQueryOptions) (ModelT, error)
 	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
-	Insert(model ModelT, fields []string) (ModelT, error)
-	Update(idOrEditLink string, model ModelT, fieldsToUpdate []string) (ModelT, error)
-	UpdateByFilter(model ModelT, fieldsToUpdate []string, options ODataQueryOptions) error
-	Delete(id string) error
-	DeleteByFilter(options ODataQueryOptions) error
+	Insert(model ModelT, tags []string) (ModelT, error)
+	Update(idOrEditLink string, model ModelT, tags []string) (ModelT, error)
+	UpdateByFilter(model ModelT, tags []string, options ODataQueryOptions) error
 
 	getCollectionUrl() string
 	getSingleUrl(modelId string) string
@@ -131,44 +132,44 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 }
 
 func (options ODataQueryOptions) ToQueryString() string {
-	queryStrings := url.Values{}
+	values := url.Values{}
 	if options.Select != NOTHING {
-		queryStrings.Add(SELECT, options.Select)
+		values.Add(SELECT, options.Select)
 	}
 	if options.Filter != NOTHING {
-		queryStrings.Add(FILTER, options.Filter)
+		values.Add(FILTER, options.Filter)
 	}
 	if options.Top != NOTHING {
-		queryStrings.Add(TOP, options.Top)
+		values.Add(TOP, options.Top)
 	}
 	if options.Skip != NOTHING {
-		queryStrings.Add(SKIP, options.Skip)
+		values.Add(SKIP, options.Skip)
 	}
 	if options.Count != NOTHING {
-		queryStrings.Add(COUNT, options.Count)
+		values.Add(COUNT, options.Count)
 	}
 	if options.OrderBy != NOTHING {
-		queryStrings.Add(ORDERBY, options.OrderBy)
+		values.Add(ORDERBY, options.OrderBy)
 	}
 	if options.Format != NOTHING {
-		queryStrings.Add(FORMAT, options.Format)
+		values.Add(FORMAT, options.Format)
 	}
 	if options.Expand != NOTHING {
-		queryStrings.Add(EXPAND, options.Expand)
+		values.Add(EXPAND, options.Expand)
 	}
 	if options.ODataEditLink != NOTHING {
-		queryStrings.Add(ODATAEDITLINK, options.ODataEditLink)
+		values.Add(ODATAEDITLINK, options.ODataEditLink)
 	}
 	if options.ODataNavigationLink != NOTHING {
-		queryStrings.Add(ODATANAVIGATIONLINK, options.ODataNavigationLink)
+		values.Add(ODATANAVIGATIONLINK, options.ODataNavigationLink)
 	}
 	if options.ODataId != NOTHING {
-		queryStrings.Add(ODATAID, options.ODataId)
+		values.Add(ODATAID, options.ODataId)
 	}
 	if options.ODataReadLink != NOTHING {
-		queryStrings.Add(ODATAREADLINK, options.ODataReadLink)
+		values.Add(ODATAREADLINK, options.ODataReadLink)
 	}
-	result := queryStrings.Encode()
+	result := values.Encode()
 	result = strings.ReplaceAll(result, "%22", `"`) // %22 can stop odata from seeing the field name. swap back to "
 	result = strings.ReplaceAll(result, "%24", "$") // sometimes %24 is not recognised as $ - make it explicitly $
 	result = strings.ReplaceAll(result, "%28", "(") // %28 can stop odata from seeing bracketed code swap back to (
@@ -203,6 +204,7 @@ type apiUpdateResponse[T interface{}] struct {
 	Value []T  `json:"value"`
 }
 
+// apiSingleResponse
 type apiSingleResponse[T interface{}] struct {
 	Value T `json:"value"`
 }
@@ -476,6 +478,60 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 	return reflect.StructField{}, false
 }
 
+// Update a model in the API
+func (dataSet odataDataSet[ModelT, Def]) Get(id string, model ModelT, values url.Values) (ModelT, error) {
+	functionName := `odataDataSet[ModelT, Def]) Update`
+
+	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
+
+	options := ODataQueryOptions{
+		Select:        values.Get(SELECT),
+		Filter:        values.Get(FILTER),
+		Top:           "1",
+		Format:        values.Get(FORMAT),
+		ODataEditLink: values.Get(ODATAEDITLINK),
+	}
+	options = options.ApplyArguments(NOTHING, values)
+	arguments := options.ToQueryString()
+	tags := strings.Split(options.Select, COMMA)
+	if len(arguments) > 0 {
+		requestUrl = fmt.Sprintf(`%s?%s`, requestUrl, arguments)
+	}
+
+	var result ModelT
+	modelMap, err := StructToMap(model, tags)
+	if err != nil {
+		return result, err
+	}
+
+	data, err := json.Marshal(modelMap)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
+	}
+
+	request, err := http.NewRequest("GET", requestUrl, bytes.NewReader(data))
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `http.NewRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
+	}
+
+	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
+	request.Header.Set("Prefer", "return=representation")
+
+	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
+}
+
 // StructListToInterface converts a list of structs to an interface
 func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
 	return StructListToMapList(data, fields)
@@ -618,13 +674,13 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 }
 
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, fields []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, tags []string) (ModelT, error) {
 	functionName := `odataDataSet[ModelT, Def]) Update`
 
 	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
 
 	var result ModelT
-	modelMap, err := StructToMap(model, fields)
+	modelMap, err := StructToMap(model, tags)
 	if err != nil {
 		return result, err
 	}
