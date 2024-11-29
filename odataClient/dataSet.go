@@ -478,9 +478,9 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 	return reflect.StructField{}, false
 }
 
-// Update a model in the API
+// Get a model in the API
 func (dataSet odataDataSet[ModelT, Def]) Get(id string, model ModelT, values url.Values) (ModelT, error) {
-	functionName := `odataDataSet[ModelT, Def]) Update`
+	functionName := `odataDataSet[ModelT, Def]) Get`
 
 	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
 
