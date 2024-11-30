@@ -83,7 +83,9 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
+	"strings"
 
 	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
@@ -163,8 +165,9 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 		"encoding/json"
 		"fmt"
 		"net/http"
+		"net/url"
 		"reflect"
-
+			
 		"github.com/Uffe-Code/go-nullable/nullable"
 	)
 
@@ -640,7 +643,7 @@ func generateSaveCode(set edmxEntitySet) string {
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 	result := `// {{publicName}}.Save determines whether to save or creates a record at the link provided the authentication provided in headers is valid.
-	func ({{type}} *{{publicName}}) Save(headers map[string]string, link string) ({{publicName}}, error) {
+	func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
 	// Check if anything has changed. Bounce out.
 	if !{{type}}.Modified(){
@@ -653,7 +656,7 @@ func generateSaveCode(set edmxEntitySet) string {
 	}
 
 	// Save {{publicName}}
-	return {{type}}.Update(headers, link)
+	return {{type}}.Update(headers, link, values)
 }
 
 func ({{type}} *{{publicName}}) Modified() bool {
@@ -665,7 +668,7 @@ func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string)
 	
 	{{publicName}}Slice := []{{publicName}}(alias)
 	for _, {{type}} := range {{publicName}}Slice {
-		{{type}}.Save(headers, link)
+		{{type}}.Save(headers, link, DefaultURLValues({{type}}.RowModId))
 		result = append(result, {{type}})
 	}
 	
@@ -761,7 +764,7 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	instance := snakeCaseToCamelCase(publicName)
 
 	result := `// {{publicName}}.Update saves the record at the link provided the authentication provided in headers is valid.
-	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string) ({{publicName}}, error) {
+	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
@@ -772,9 +775,10 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 		dataset := collection.DataSet()
 
 		modifiedFields := nullable.GetModifiedTags({{type}})
+		values.Set(SELECT, strings.Join(modifiedFields, COMMA))
 		selectedFields := nullable.GetSelectedTags({{type}},false)
 
-		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, modifiedFields)
+		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, values)
 		if err != nil {
 			m := ErrorMessage{
 				Attempted:  "{{instance}}.Update",

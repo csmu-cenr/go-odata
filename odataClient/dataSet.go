@@ -15,11 +15,6 @@ const (
 	SELECTED = `Selected`
 )
 
-type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
-	client          *oDataClient
-	modelDefinition ODataModelDefinition[ModelT]
-}
-
 type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Get(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	Delete(id string) error
@@ -28,18 +23,39 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
 	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, tags []string) (ModelT, error)
-	Update(idOrEditLink string, model ModelT, tags []string) (ModelT, error)
+	Update(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	UpdateByFilter(model ModelT, tags []string, options ODataQueryOptions) error
 
 	getCollectionUrl() string
 	getSingleUrl(modelId string) string
 }
 
-func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient, modelDefinition Def) ODataDataSet[ModelT, Def] {
-	return odataDataSet[ModelT, Def]{
-		client:          client.(*oDataClient),
-		modelDefinition: modelDefinition,
-	}
+type apiDeleteResponse[T interface{}] struct {
+	Count *int `json:"@odata.count"`
+	Value []T  `json:"value"`
+}
+
+type apiMultiResponse[T interface{}] struct {
+	Value    []T    `json:"value"`
+	Count    *int   `json:"@odata.count"`
+	Universe *int   `json:"universe,omitempty"` // total size of the set
+	Context  string `json:"@odata.context"`
+	NextLink string `json:"@odata.nextLink,omitempty"`
+}
+
+// apiSingleResponse
+type apiSingleResponse[T interface{}] struct {
+	Value T `json:"value"`
+}
+
+type apiUpdateResponse[T interface{}] struct {
+	Count *int `json:"@odata.count"`
+	Value []T  `json:"value"`
+}
+
+type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
+	client          *oDataClient
+	modelDefinition ODataModelDefinition[ModelT]
 }
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
@@ -181,6 +197,122 @@ func (options ODataQueryOptions) ToQueryString() string {
 	return result
 }
 
+// Delete a model from the API
+func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
+
+	functionName := `odataDataSet[ModelT, Def]) Delete`
+
+	requestUrl := dataSet.getSingleUrl(id)
+	request, err := http.NewRequest("DELETE", requestUrl, nil)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted: `http.NewRequest`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
+	}
+	dataSet.client.mapHeadersToRequest(request)
+	response, err := dataSet.client.httpClient.Do(request)
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	if err != nil {
+		message := ErrorMessage{ErrorNo: response.StatusCode,
+			Attempted: `dataSet.client.httpClient.Do`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
+	}
+
+	return nil
+}
+
+func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOptions) error {
+
+	functionName := `odataDataSet[ModelT, Def]) DeleteByFilter`
+
+	requestUrl := dataSet.getCollectionUrl()
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("DELETE", requestUrl, nil)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted: `http.NewRequest`,
+			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
+	}
+	dataSet.client.mapHeadersToRequest(request)
+	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `executeHttpRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Options: &options,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return message
+	}
+
+	return nil
+}
+
+// Get a model in the API
+func (dataSet odataDataSet[ModelT, Def]) Get(id string, model ModelT, values url.Values) (ModelT, error) {
+	functionName := `odataDataSet[ModelT, Def]) Get`
+
+	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
+
+	options := ODataQueryOptions{
+		Select:        values.Get(SELECT),
+		Filter:        values.Get(FILTER),
+		Top:           "1",
+		Format:        values.Get(FORMAT),
+		ODataEditLink: values.Get(ODATAEDITLINK),
+	}
+	options = options.ApplyArguments(NOTHING, values)
+	arguments := options.ToQueryString()
+	tags := strings.Split(options.Select, COMMA)
+	if len(arguments) > 0 {
+		requestUrl = fmt.Sprintf(`%s?%s`, requestUrl, arguments)
+	}
+
+	var result ModelT
+	modelMap, err := StructToMap(model, tags)
+	if err != nil {
+		return result, err
+	}
+
+	data, err := json.Marshal(modelMap)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `json.Marshal`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
+	}
+
+	request, err := http.NewRequest("GET", requestUrl, bytes.NewReader(data))
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Attempted:  `http.NewRequest`,
+			Function:   functionName,
+			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
+			Payload: modelMap,
+			Details: fmt.Sprintf(`%+v`, err)}
+		return result, message
+	}
+
+	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
+	request.Header.Set("Prefer", "return=representation")
+
+	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
+}
 func (dataSet odataDataSet[ModelT, Def]) getCollectionUrl() string {
 	return dataSet.client.baseUrl + dataSet.modelDefinition.Url()
 }
@@ -192,103 +324,6 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 		return modelId
 	}
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
-}
-
-type apiDeleteResponse[T interface{}] struct {
-	Count *int `json:"@odata.count"`
-	Value []T  `json:"value"`
-}
-
-type apiUpdateResponse[T interface{}] struct {
-	Count *int `json:"@odata.count"`
-	Value []T  `json:"value"`
-}
-
-// apiSingleResponse
-type apiSingleResponse[T interface{}] struct {
-	Value T `json:"value"`
-}
-
-type apiMultiResponse[T interface{}] struct {
-	Value    []T    `json:"value"`
-	Count    *int   `json:"@odata.count"`
-	Universe *int   `json:"universe,omitempty"` // total size of the set
-	Context  string `json:"@odata.context"`
-	NextLink string `json:"@odata.nextLink,omitempty"`
-}
-
-// Single model from the API by ID using the model json tags.
-func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
-
-	functionName := `odataDataSet[ModelT, Def]) Single`
-	var responseModel ModelT
-
-	requestUrl := dataSet.getSingleUrl(id)
-	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
-		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
-	}
-	request, err := http.NewRequest("GET", requestUrl, nil)
-
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Message:    UNEXPECTED_ERROR,
-			Function:   functionName,
-			RequestUrl: requestUrl,
-			Options:    &options,
-			Details:    fmt.Sprintf(`%+v`, err)}
-		return responseModel, message
-	}
-	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
-			Function:   functionName,
-			RequestUrl: requestUrl,
-			Options:    &options,
-			InnerError: err}
-		switch e := err.(type) {
-		case *ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		case ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		default:
-		}
-		return responseModel, message
-	}
-
-	return responseData, nil
-}
-
-// Single model from the API using a Value tag, then model tags, by ID
-func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
-
-	functionName := `odataDataSet[ModelT, Def]) SingleValue`
-
-	requestUrl := dataSet.getSingleUrl(id)
-	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
-		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
-	}
-	request, err := http.NewRequest("GET", requestUrl, nil)
-	var responseModel ModelT
-	if err != nil {
-		return responseModel, err
-	}
-	responseData, err := executeHttpRequest[apiSingleResponse[ModelT]](*dataSet.client, request)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusBadRequest, Function: functionName,
-			RequestUrl: requestUrl,
-			InnerError: err}
-		switch e := err.(type) {
-		case *ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		case ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		default:
-		}
-		return responseModel, message
-	}
-	return responseData.Value, nil
 }
 
 // List data from the API
@@ -369,268 +404,6 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// isFieldExported checks if a struct field is public (exported).
-func isFieldExported(field reflect.StructField) bool {
-	return field.PkgPath == ""
-}
-
-// isDoubleQuoted checks if the first and last characters of the string are double quotes.
-func isDoubleQuoted(field string) bool {
-	// Must be at least 3 characters long to be quoted
-	if len(field) < 2 {
-		return false
-	}
-
-	// Get the first and last characters
-	first := rune(field[0])
-	last := rune(field[len(field)-1])
-
-	// Return true if both are double quotes
-	return first == '"' && last == '"'
-}
-
-// isNotDoubleQuoted inverts isDoubleQuoted
-func isNotDoubleQuoted(field string) bool {
-	return !isDoubleQuoted(field)
-}
-
-// quoteCommaDelimited turns a comma delimited string into a double quoted comma delimited string.
-// Such that 1,"2",3,4,""5"" is returned as "1","2","3","4","5"
-func quoteCommaDelimited(input string) string {
-	// Split the string by commas
-	parts := strings.Split(input, ",")
-
-	// Process each part, strip existing quotes and enclose in double quotes
-	for i, part := range parts {
-		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
-		parts[i] = fmt.Sprintf(`"%s"`, part)
-	}
-
-	// Join the parts back together with commas
-	return strings.Join(parts, ",")
-}
-
-func StructToAny(data interface{}, fields []string) (interface{}, error) {
-	result, err := StructToMap(data, fields)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-
-	// Get the type and value of the input data
-	dataType := reflect.TypeOf(data)
-	dataValue := reflect.ValueOf(data)
-
-	// Ensure the input is a struct
-	if dataType.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("input is not a struct")
-	}
-
-	// If fields is empty, map all fields in the struct
-	if len(fields) == 0 {
-		for i := 0; i < dataType.NumField(); i++ {
-			field := dataType.Field(i)
-			if isFieldExported(field) {
-				fieldValue := dataValue.Field(i).Interface()
-				result[field.Name] = fieldValue
-			}
-		}
-		return result, nil
-	}
-
-	// Iterate over the fields to be selected
-	for _, fieldName := range fields {
-		// Find the field by JSON tag
-		field, found := findFieldByJSONTag(dataType, fieldName)
-		if !found {
-			// Ignore fields not found in the struct
-			continue
-		}
-
-		// field names must be exported to access the value
-		if isFieldExported(field) {
-			// Get the field value
-			fieldValue := dataValue.FieldByName(field.Name).Interface()
-
-			// Add the field and value to the result map
-			result[fieldName] = fieldValue
-		} else {
-			result[fieldName] = nil
-		}
-	}
-
-	return result, nil
-}
-
-// findFieldByJSONTag finds a struct field by its JSON tag.
-func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructField, bool) {
-	for i := 0; i < dataType.NumField(); i++ {
-		field := dataType.Field(i)
-		tag := strings.Split(field.Tag.Get("json"), ",")[0]
-		if tag == jsonTag {
-			return field, true
-		}
-	}
-	return reflect.StructField{}, false
-}
-
-// Get a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Get(id string, model ModelT, values url.Values) (ModelT, error) {
-	functionName := `odataDataSet[ModelT, Def]) Get`
-
-	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
-
-	options := ODataQueryOptions{
-		Select:        values.Get(SELECT),
-		Filter:        values.Get(FILTER),
-		Top:           "1",
-		Format:        values.Get(FORMAT),
-		ODataEditLink: values.Get(ODATAEDITLINK),
-	}
-	options = options.ApplyArguments(NOTHING, values)
-	arguments := options.ToQueryString()
-	tags := strings.Split(options.Select, COMMA)
-	if len(arguments) > 0 {
-		requestUrl = fmt.Sprintf(`%s?%s`, requestUrl, arguments)
-	}
-
-	var result ModelT
-	modelMap, err := StructToMap(model, tags)
-	if err != nil {
-		return result, err
-	}
-
-	data, err := json.Marshal(modelMap)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Attempted:  `json.Marshal`,
-			Function:   functionName,
-			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Payload: modelMap,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return result, message
-	}
-
-	request, err := http.NewRequest("GET", requestUrl, bytes.NewReader(data))
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Attempted:  `http.NewRequest`,
-			Function:   functionName,
-			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Payload: modelMap,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return result, message
-	}
-
-	request.Header.Set("Content-Type", "application/json;odata.metadata=minimal")
-	request.Header.Set("Prefer", "return=representation")
-
-	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
-}
-
-// StructListToInterface converts a list of structs to an interface
-func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
-	return StructListToMapList(data, fields)
-}
-
-// StructListToMapList converts a list of structs to a list of maps with selected fields.
-func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
-	var result []map[string]interface{}
-
-	// Get the type and value of the input data
-	dataType := reflect.TypeOf(data)
-	dataValue := reflect.ValueOf(data)
-
-	// Ensure the input is a slice
-	if dataType.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("input is not a slice")
-	}
-
-	// Iterate over the elements of the slice
-	for i := 0; i < dataValue.Len(); i++ {
-		element := dataValue.Index(i).Interface()
-
-		// Convert the struct to a map with selected fields
-		elementMap, err := StructToMap(element, fields)
-		if err != nil {
-			return nil, fmt.Errorf("error converting struct to map: %v", err)
-		}
-
-		// Append the map to the result slice
-		result = append(result, elementMap)
-	}
-
-	return result, nil
-}
-
-// quoteODataFields takes an OData filter string and quotes the specified field names in the fields slice.
-func quoteODataFields(query string, fields []string) string {
-	// List of OData operations that involve fields
-	operations := []string{"eq", "ne", "gt", "ge", "lt", "le", "and", "or"}
-
-	// Create a regex pattern to match field names before any operation
-	fieldPattern := strings.Join(fields, "|")
-
-	// Compile a regex to find fields followed by operations, handling optional parentheses and spaces
-	regex := regexp.MustCompile(`(?i)\(?\s*(\b(` + fieldPattern + `)\b)\s*(eq|ne|gt|ge|lt|le|and|or)\s*`)
-
-	// Replace matched fields with quoted field names, ensuring spaces are wrapped around every element
-	quotedQuery := regex.ReplaceAllStringFunc(query, func(match string) string {
-		for _, operation := range operations {
-			if strings.Contains(strings.ToLower(match), operation) {
-				// Split the match into parts (field and operator)
-				parts := strings.Fields(match)
-				if len(parts) >= 2 {
-					// Add spaces around field name and operator
-					return fmt.Sprintf(" \"%s\" %s ", parts[0], strings.Join(parts[1:], " "))
-				}
-			}
-		}
-		return match
-	})
-
-	// Replace any occurrences of multiple spaces with a single space
-	for strings.Contains(quotedQuery, "  ") {
-		quotedQuery = strings.ReplaceAll(quotedQuery, "  ", " ")
-	}
-
-	return quotedQuery
-}
-
-// removeEmptyKeys resolves an issue when the odata source sends back an invalid editlink with an empty string key
-func removeEmptyKeys(requestUrl string) string {
-
-	if strings.Contains(requestUrl, DOUBLE_SINGLE_QUOTE) {
-		elements := strings.Split(requestUrl, LEFT_BRACKET)
-		keys := strings.Split(elements[1], COMMA)
-		valid := []string{}
-		for _, k := range keys {
-			key := strings.Split(k, RIGHT_BRACKET)[0]
-			if strings.EqualFold(key, DOUBLE_SINGLE_QUOTE) {
-				continue
-			}
-			valid = append(valid, key)
-		}
-		requestUrl = fmt.Sprintf(`%s(%s)`, elements[0], strings.Join(valid, COMMA))
-	}
-
-	return requestUrl
-}
-
-// stringSliceContains checks if a string slice stringSliceContains a specific element
-func stringSliceContains(slice []string, item string) bool {
-	for _, v := range slice {
-		if v == item {
-			return true
-		}
-	}
-	return false
-}
-
 // Insert a model to the API
 func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (ModelT, error) {
 
@@ -673,13 +446,97 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
 
+// Single model from the API by ID using the model json tags.
+func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
+
+	functionName := `odataDataSet[ModelT, Def]) Single`
+	var responseModel ModelT
+
+	requestUrl := dataSet.getSingleUrl(id)
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("GET", requestUrl, nil)
+
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+			Message:    UNEXPECTED_ERROR,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Options:    &options,
+			Details:    fmt.Sprintf(`%+v`, err)}
+		return responseModel, message
+	}
+	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
+			Function:   functionName,
+			RequestUrl: requestUrl,
+			Options:    &options,
+			InnerError: err}
+		switch e := err.(type) {
+		case *ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		case ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		default:
+		}
+		return responseModel, message
+	}
+
+	return responseData, nil
+}
+
+// Single model from the API using a Value tag, then model tags, by ID
+func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
+
+	functionName := `odataDataSet[ModelT, Def]) SingleValue`
+
+	requestUrl := dataSet.getSingleUrl(id)
+	urlArgments := options.ToQueryString()
+	if urlArgments != NOTHING {
+		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+	}
+	request, err := http.NewRequest("GET", requestUrl, nil)
+	var responseModel ModelT
+	if err != nil {
+		return responseModel, err
+	}
+	responseData, err := executeHttpRequest[apiSingleResponse[ModelT]](*dataSet.client, request)
+	if err != nil {
+		message := ErrorMessage{ErrorNo: http.StatusBadRequest, Function: functionName,
+			RequestUrl: requestUrl,
+			InnerError: err}
+		switch e := err.(type) {
+		case *ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		case ErrorMessage:
+			message.ErrorNo = e.ErrorNo
+		default:
+		}
+		return responseModel, message
+	}
+	return responseData.Value, nil
+}
+
 // Update a model in the API
-func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, tags []string) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, values url.Values) (ModelT, error) {
 	functionName := `odataDataSet[ModelT, Def]) Update`
 
-	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
-
 	var result ModelT
+
+	requestUrl := removeEmptyKeys(dataSet.getSingleUrl(id))
+	tags := strings.Split(values.Get(SELECT), COMMA)
+
+	options := ODataQueryOptions{
+		Filter: values.Get(FILTER),
+	}
+	arguments := options.ToQueryString()
+	if len(arguments) > 0 {
+		requestUrl = fmt.Sprintf(`%s?%s`, requestUrl, arguments)
+	}
+
 	modelMap, err := StructToMap(model, tags)
 	if err != nil {
 		return result, err
@@ -711,69 +568,6 @@ func (dataSet odataDataSet[ModelT, Def]) Update(id string, model ModelT, tags []
 	request.Header.Set("Prefer", "return=representation")
 
 	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
-}
-
-// Delete a model from the API
-func (dataSet odataDataSet[ModelT, Def]) Delete(id string) error {
-
-	functionName := `odataDataSet[ModelT, Def]) Delete`
-
-	requestUrl := dataSet.getSingleUrl(id)
-	request, err := http.NewRequest("DELETE", requestUrl, nil)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Attempted: `http.NewRequest`,
-			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return message
-	}
-	dataSet.client.mapHeadersToRequest(request)
-	response, err := dataSet.client.httpClient.Do(request)
-	if response.Body != nil {
-		defer response.Body.Close()
-	}
-	if err != nil {
-		message := ErrorMessage{ErrorNo: response.StatusCode,
-			Attempted: `dataSet.client.httpClient.Do`,
-			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return message
-	}
-
-	return nil
-}
-
-func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOptions) error {
-
-	functionName := `odataDataSet[ModelT, Def]) DeleteByFilter`
-
-	requestUrl := dataSet.getCollectionUrl()
-	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
-		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
-	}
-	request, err := http.NewRequest("DELETE", requestUrl, nil)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Attempted: `http.NewRequest`,
-			Function:  functionName, RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Options: &options,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return message
-	}
-	dataSet.client.mapHeadersToRequest(request)
-	_, err = executeHttpRequest[apiDeleteResponse[ModelT]](*dataSet.client, request)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Attempted:  `executeHttpRequest`,
-			Function:   functionName,
-			RequestUrl: requestUrl, Message: UNEXPECTED_ERROR,
-			Options: &options,
-			Details: fmt.Sprintf(`%+v`, err)}
-		return message
-	}
-
-	return nil
 }
 
 func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []string, options ODataQueryOptions) error {
@@ -844,4 +638,214 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 	}
 
 	return nil
+}
+
+// findFieldByJSONTag finds a struct field by its JSON tag.
+func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructField, bool) {
+	for i := 0; i < dataType.NumField(); i++ {
+		field := dataType.Field(i)
+		tag := strings.Split(field.Tag.Get("json"), ",")[0]
+		if tag == jsonTag {
+			return field, true
+		}
+	}
+	return reflect.StructField{}, false
+}
+
+// isFieldExported checks if a struct field is public (exported).
+func isFieldExported(field reflect.StructField) bool {
+	return field.PkgPath == ""
+}
+
+// isDoubleQuoted checks if the first and last characters of the string are double quotes.
+func isDoubleQuoted(field string) bool {
+	// Must be at least 3 characters long to be quoted
+	if len(field) < 2 {
+		return false
+	}
+
+	// Get the first and last characters
+	first := rune(field[0])
+	last := rune(field[len(field)-1])
+
+	// Return true if both are double quotes
+	return first == '"' && last == '"'
+}
+
+func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient, modelDefinition Def) ODataDataSet[ModelT, Def] {
+	return odataDataSet[ModelT, Def]{
+		client:          client.(*oDataClient),
+		modelDefinition: modelDefinition,
+	}
+}
+
+// quoteCommaDelimited turns a comma delimited string into a double quoted comma delimited string.
+// Such that 1,"2",3,4,""5"" is returned as "1","2","3","4","5"
+func quoteCommaDelimited(input string) string {
+	// Split the string by commas
+	parts := strings.Split(input, ",")
+
+	// Process each part, strip existing quotes and enclose in double quotes
+	for i, part := range parts {
+		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
+		parts[i] = fmt.Sprintf(`"%s"`, part)
+	}
+
+	// Join the parts back together with commas
+	return strings.Join(parts, ",")
+}
+
+// quoteODataFields takes an OData filter string and quotes the specified field names in the fields slice.
+func quoteODataFields(query string, fields []string) string {
+	// List of OData operations that involve fields
+	operations := []string{"eq", "ne", "gt", "ge", "lt", "le", "and", "or"}
+
+	// Create a regex pattern to match field names before any operation
+	fieldPattern := strings.Join(fields, "|")
+
+	// Compile a regex to find fields followed by operations, handling optional parentheses and spaces
+	regex := regexp.MustCompile(`(?i)\(?\s*(\b(` + fieldPattern + `)\b)\s*(eq|ne|gt|ge|lt|le|and|or)\s*`)
+
+	// Replace matched fields with quoted field names, ensuring spaces are wrapped around every element
+	quotedQuery := regex.ReplaceAllStringFunc(query, func(match string) string {
+		for _, operation := range operations {
+			if strings.Contains(strings.ToLower(match), operation) {
+				// Split the match into parts (field and operator)
+				parts := strings.Fields(match)
+				if len(parts) >= 2 {
+					// Add spaces around field name and operator
+					return fmt.Sprintf(" \"%s\" %s ", parts[0], strings.Join(parts[1:], " "))
+				}
+			}
+		}
+		return match
+	})
+
+	// Replace any occurrences of multiple spaces with a single space
+	for strings.Contains(quotedQuery, "  ") {
+		quotedQuery = strings.ReplaceAll(quotedQuery, "  ", " ")
+	}
+
+	return quotedQuery
+}
+
+// removeEmptyKeys resolves an issue when the odata source sends back an invalid editlink with an empty string key
+func removeEmptyKeys(requestUrl string) string {
+
+	if strings.Contains(requestUrl, DOUBLE_SINGLE_QUOTE) {
+		elements := strings.Split(requestUrl, LEFT_BRACKET)
+		keys := strings.Split(elements[1], COMMA)
+		valid := []string{}
+		for _, k := range keys {
+			key := strings.Split(k, RIGHT_BRACKET)[0]
+			if strings.EqualFold(key, DOUBLE_SINGLE_QUOTE) {
+				continue
+			}
+			valid = append(valid, key)
+		}
+		requestUrl = fmt.Sprintf(`%s(%s)`, elements[0], strings.Join(valid, COMMA))
+	}
+
+	return requestUrl
+}
+
+// stringSliceContains checks if a string slice stringSliceContains a specific element
+func stringSliceContains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+// StructListToInterface converts a list of structs to an interface
+func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
+	return StructListToMapList(data, fields)
+}
+
+// StructListToMapList converts a list of structs to a list of maps with selected fields.
+func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
+	var result []map[string]interface{}
+
+	// Get the type and value of the input data
+	dataType := reflect.TypeOf(data)
+	dataValue := reflect.ValueOf(data)
+
+	// Ensure the input is a slice
+	if dataType.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("input is not a slice")
+	}
+
+	// Iterate over the elements of the slice
+	for i := 0; i < dataValue.Len(); i++ {
+		element := dataValue.Index(i).Interface()
+
+		// Convert the struct to a map with selected fields
+		elementMap, err := StructToMap(element, fields)
+		if err != nil {
+			return nil, fmt.Errorf("error converting struct to map: %v", err)
+		}
+
+		// Append the map to the result slice
+		result = append(result, elementMap)
+	}
+
+	return result, nil
+}
+
+func StructToAny(data interface{}, fields []string) (interface{}, error) {
+	result, err := StructToMap(data, fields)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	// Get the type and value of the input data
+	dataType := reflect.TypeOf(data)
+	dataValue := reflect.ValueOf(data)
+
+	// Ensure the input is a struct
+	if dataType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("input is not a struct")
+	}
+
+	// If fields is empty, map all fields in the struct
+	if len(fields) == 0 {
+		for i := 0; i < dataType.NumField(); i++ {
+			field := dataType.Field(i)
+			if isFieldExported(field) {
+				fieldValue := dataValue.Field(i).Interface()
+				result[field.Name] = fieldValue
+			}
+		}
+		return result, nil
+	}
+
+	// Iterate over the fields to be selected
+	for _, fieldName := range fields {
+		// Find the field by JSON tag
+		field, found := findFieldByJSONTag(dataType, fieldName)
+		if !found {
+			// Ignore fields not found in the struct
+			continue
+		}
+
+		// field names must be exported to access the value
+		if isFieldExported(field) {
+			// Get the field value
+			fieldValue := dataValue.FieldByName(field.Name).Interface()
+
+			// Add the field and value to the result map
+			result[fieldName] = fieldValue
+		} else {
+			result[fieldName] = nil
+		}
+	}
+
+	return result, nil
 }
