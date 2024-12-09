@@ -32,10 +32,26 @@ func (s edmxEntitySet) getEntityType() edmxEntityType {
 }
 
 type edmxProperty struct {
-	Name     string `xml:"Name,attr"`
-	Type     string `xml:"Type,attr"`
-	Nullable string `xml:"Nullable,attr"`
-	schema   edmxSchema
+	Name        string            `xml:"Name,attr"`
+	Type        string            `xml:"Type,attr"`
+	Nullable    string            `xml:"Nullable,attr"`
+	Annotations *[]edmxAnnotation `xml:"Annotation,omitempty"`
+	schema      edmxSchema
+}
+
+type edmxAnnotation struct {
+	Term       string          `xml:"Term,attr"`
+	Bool       string          `xml:"Bool,attr,omitempty"`
+	String     string          `xml:"String,attr,omitempty"`
+	Int        string          `xml:"Int"`
+	Default    string          `xml:"Default,attr,omitempty"`
+	Collection *edmxCollection `xml:"Collection"`
+	EnumMember *[]string       `xml:"EnumMember"`
+}
+
+type edmxCollection struct {
+	String     *[]string `xml:"String,omitempty"`
+	EnumMember *[]string `xml:"Enum,omitempty"`
 }
 
 func (p edmxProperty) goType() string {
@@ -101,6 +117,15 @@ type edmxEntityType struct {
 type rawEdmxEntityType struct {
 	Name       string         `xml:"Name,attr"`
 	Properties []edmxProperty `xml:"Property"`
+	Key        *edmxKey       `xml:"Key,omitempty"`
+}
+
+type edmxKey struct {
+	PropertyRef []exmdPropertyRef `xml:"PropertyRef"`
+}
+
+type exmdPropertyRef struct {
+	Name string `xml:"Name,attr"`
 }
 
 func (e rawEdmxEntityType) toEdmxEntityType(schema edmxSchema) edmxEntityType {
@@ -135,8 +160,7 @@ type rawEdmxDataServices struct {
 }
 
 func (ds *rawEdmxDataServices) toKeys() map[int][]string {
-	var keys map[int][]string
-	keys = make(map[int][]string)
+	keys := map[int][]string{}
 	index := 0
 	for _, schema := range ds.Schemas {
 		for _, entityType := range schema.EntityTypes {
@@ -167,6 +191,11 @@ type rawEdmxSchema struct {
 	Containers   []rawEdmxContainer  `xml:"EntityContainer"`
 	EnumTypes    []edmxEnumType      `xml:"EnumType"`
 	ComplexTypes []rawEdmxEntityType `xml:"ComplexType"`
+	Annotations  *rawEdmxAnnotations `xml:"Annotations"`
+}
+
+type rawEdmxAnnotations struct {
+	Annotation []edmxAnnotation `xml:"Annotation,omitempty"`
 }
 
 func (s rawEdmxSchema) toSchema(services edmxDataServices) edmxSchema {

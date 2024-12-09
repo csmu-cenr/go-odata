@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	FALSE   = `false`
-	NOTHING = ``
-	TRUE    = `true`
+	FALSE = `false`
+	TRUE  = `true`
 )
 
 func addPackageNameToExtra(packageLine string, extraPath string) (string, error) {
@@ -59,16 +58,33 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 
 	code := map[string]string{}
 
-	nilModel := `
+	customErrors := `
 	
 	type NilModel struct {
 		Model  string
 		Filter string
 	}
 	
+	type RecordIsOutOfDate struct {
+		Model  string      
+		Uuid   string      
+		Id     float64     
+		Record interface{} 
+	}
+
 	func (e NilModel) Error() string {
 		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
 	}
+
+	func (r RecordIsOutOfDate) Error() string {
+	data, err := json.Marshal(r)
+	if err != nil {
+		return err.Error()
+	}
+	return string(data)
+}
+
+
 	`
 
 	deleteCode := fmt.Sprintf(`package %s
@@ -107,6 +123,7 @@ import (
 	modelCode := fmt.Sprintf(`package %s
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/Uffe-Code/go-nullable/nullable"
@@ -131,7 +148,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 %s
 
-`, packageName, nilModel)
+`, packageName, customErrors)
 
 	selectByTableNameCode := fmt.Sprintf(`package %s
 
@@ -248,31 +265,31 @@ import (
 	return nil, nil
 }
 	`
-	if g.Package.Models != NOTHING {
+	if g.Package.Models != "" {
 		code[g.Package.Models] = modelCode
 	}
-	if g.Package.SelectByTableName != NOTHING {
+	if g.Package.SelectByTableName != "" {
 		code[g.Package.SelectByTableName] = selectByTableNameCode
 	}
-	if g.Package.Select != NOTHING {
+	if g.Package.Select != "" {
 		code[g.Package.Select] = selectCode
 	}
-	if g.Package.Datasets != NOTHING {
+	if g.Package.Datasets != "" {
 		code[g.Package.Datasets] = datasets
 	}
-	if g.Package.Maps != NOTHING {
+	if g.Package.Maps != "" {
 		code[g.Package.Maps] = mapCode
 	}
-	if g.Package.Update != NOTHING {
+	if g.Package.Update != "" {
 		code[g.Package.Update] = updateCode
 	}
-	if g.Package.Insert != NOTHING {
+	if g.Package.Insert != "" {
 		code[g.Package.Insert] = insertCode
 	}
-	if g.Package.Save != NOTHING {
+	if g.Package.Save != "" {
 		code[g.Package.Save] = saveCode
 	}
-	if g.Package.Delete != NOTHING {
+	if g.Package.Delete != "" {
 		code[g.Package.Delete] = deleteCode
 	}
 	packageLine := fmt.Sprintf("package %s", packageName)
@@ -355,7 +372,50 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 				if g.Fields.Json.OmitEmpty {
 					jsonSupport += ",omitempty"
 				}
-				jsonSupport = fmt.Sprintf("`json:\"%s\"`", jsonSupport)
+				jsonSupport = fmt.Sprintf("`json:\"%s\"", jsonSupport)
+			}
+			tags := ""
+			if prop.Annotations != nil {
+				annotations := map[string]map[string]string{}
+				for _, annotation := range *prop.Annotations {
+					if annotation.EnumMember == nil {
+						head, tail := HeadAndTailText(annotation.Term, ".", 1)
+						mapped := map[string]string{}
+						switch {
+						case annotation.Bool != "":
+							mapped[tail] = annotation.Bool
+						case annotation.String != "":
+							mapped[tail] = annotation.String
+						case annotation.Int != "":
+							mapped[tail] = annotation.Int
+						default:
+							mapped[tail] = ""
+						}
+						annotations[head] = mapped
+					} else {
+						mapped := map[string]string{}
+						for _, enum := range *annotation.EnumMember {
+							mapped[enum] = ""
+						}
+						annotations[annotation.Term] = mapped
+					}
+				}
+				for name, term := range annotations {
+					tag := fmt.Sprintf(` %s:"`, name)
+					values := []string{}
+					for k, v := range term {
+						if v == "" {
+							values = append(values, k)
+						} else {
+							values = append(values, fmt.Sprintf(`%s=%s`, k, v))
+						}
+					}
+					tag = fmt.Sprintf(`%s%s"`, tag, strings.Join(values, ","))
+					tags = fmt.Sprintf(`%s%s`, tags, tag)
+				}
+			}
+			if jsonSupport != "" {
+				jsonSupport = fmt.Sprintf("%s%s`", jsonSupport, tags)
 			}
 			pointer := ""
 			if g.Fields.Pointers {
@@ -372,7 +432,17 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 	structString += fmt.Sprintf("type\t%sAlias\t[]%s\n", publicName, publicName)
 	structString += fmt.Sprintf("type\t%sAsc\t[]%s\n", publicName, publicName)
 	structString += fmt.Sprintf("type\t%sDesc\t[]%s\n", publicName, publicName)
-
+	structString += fmt.Sprintf(
+		"\n\ntype Meta%s struct {\n"+
+			"\tAction     string                   `json:\"action,omitempty\"`\n"+
+			"\tFieldData  %s                       `json:\"fieldData\"`\n"+
+			"\tModel      string                   `json:\"model,omitempty\"`\n"+
+			"\tModId      string                   `json:\"modId,omitempty\"`\n"+
+			"\tPortalData map[string][]interface{} `json:\"portalData,omitempty\"`\n"+
+			"\tRecordId   string                   `json:\"recordId,omitempty\"`\n"+
+			"}\n\n",
+		publicName, publicName,
+	)
 	return structString
 }
 
@@ -645,13 +715,15 @@ func generateSaveCode(set edmxEntitySet) string {
 	result := `// {{publicName}}.Save determines whether to save or creates a record at the link provided the authentication provided in headers is valid.
 	func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
+	values.Del(FILTER)
+
 	// Check if anything has changed. Bounce out.
 	if !{{type}}.Modified(){
 		return *{{type}}, nil
 	} 
 
 	// Check if {{publicName}} has an edit link. If not try to created.
-	if {{type}}.ODataEditLink == NOTHING {
+	if {{type}}.ODataEditLink == "" {
 		return {{type}}.Insert(headers, link)
 	}
 
@@ -702,13 +774,13 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 	return result, nil
 }
 
-func ({{type}} *{{publicName}}) SetModifiedToSelected() error {
+func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 
 	selectedFields := nullable.GetSelectedTags({{type}}, false)
 	err := nullable.SetModifiedBooleanFields(reflect.ValueOf({{type}}), selectedFields, true, true)
 	if err != nil {
 		m := ErrorMessage{
-			Attempted:  "SetModifiedToSelected",
+			Attempted:  "SetModifiedIfSelected",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
 			InnerError: err,
@@ -745,6 +817,13 @@ func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base *{{publicName}}) err
 func ({{type}} *{{publicName}}) GetModifiedTags() []string {
 	return nullable.GetModifiedTags({{type}})
 }
+
+
+func ({{type}} *{{publicName}}) Mapped() (map[string]interface{}, error) {
+	tags := nullable.GetSelectedTags({{type}},false)
+	return StructToMap({{type}},tags)
+}
+
 
 `
 
@@ -935,6 +1014,28 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 
 	return result
 
+}
+
+// HeadAndTailText processes text by extracting part of it based on a delimiter and index.
+func HeadAndTailText(text, delimiter string, extract int) (string, string) {
+	// Check if the inputs make sense
+	if delimiter == "" || extract < 0 {
+		return text, ""
+	}
+
+	// Split the text into parts
+	parts := strings.Split(text, delimiter)
+
+	// Check if the extract index is within bounds
+	if extract >= len(parts) {
+		return text, ""
+	}
+
+	// Reconstruct head and tail
+	head := strings.Join(parts[:len(parts)-extract], delimiter)
+	tail := strings.Join(parts[len(parts)-extract:], delimiter)
+
+	return head, tail
 }
 
 // snakeCaseToCamelCase converts a snake_case string to camelCase

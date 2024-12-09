@@ -9,6 +9,7 @@ type ErrorMessage struct {
 	ErrorNo   int         `json:"errorNo"`
 	Function  string      `json:"function,omitempty"`
 	Message   string      `json:"message"`
+	Payload   interface{} `json:"payload"`
 }
 
 func (e ErrorMessage) Error() string {

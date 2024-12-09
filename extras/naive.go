@@ -21,6 +21,38 @@ func formatDateTimeWithSeconds(t time.Time) string {
 
 type NaiveDate time.Time
 
+func (nt NaiveDate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(formatDate(time.Time(nt)))
+}
+
+func (ts *NaiveDate) UnmarshalJSON(data []byte) error {
+
+	var timeString string
+	if err := json.Unmarshal(data, &timeString); err != nil {
+		return err
+	}
+
+	if timeString == "" {
+		timeString = "0001-01-01"
+	}
+
+	var dateFormat string
+	if strings.Contains(timeString, "/") {
+		dateFormat = "01/02/2006"
+	} else {
+		dateFormat = "2006-01-02"
+	}
+
+	parsedTime, err := time.Parse(dateFormat, timeString)
+	if err != nil {
+		message := fmt.Errorf("NaiveDate: %+v", err)
+		return message
+	}
+
+	*ts = NaiveDate(parsedTime)
+	return nil
+}
+
 // Method to add seconds to NaiveTime
 func (nt NaiveTime) AddSeconds(seconds float64) NaiveTime {
 	t := time.Time(nt)
@@ -42,10 +74,6 @@ func (nt NaiveTime) ToTime() NaiveDuration {
 	return NaiveDuration(r)
 }
 
-func (nt NaiveDate) MarshalJSON() ([]byte, error) {
-	return json.Marshal(formatDate(time.Time(nt)))
-}
-
 func NaiveTimesDoEqualDateHoursMinutes(left, right NaiveTime) bool {
 	leftText := time.Time(left).Format(NAIVE_TIMESTAMP_YYYY_MM_DD_HH_MM)
 	rightText := time.Time(right).Format(NAIVE_TIMESTAMP_YYYY_MM_DD_HH_MM)
@@ -54,32 +82,6 @@ func NaiveTimesDoEqualDateHoursMinutes(left, right NaiveTime) bool {
 
 func NaiveTimesDoNotEqualDateHoursMinutes(left, right NaiveTime) bool {
 	return !NaiveTimesDoEqualDateHoursMinutes(left, right)
-}
-
-func (ts *NaiveDate) UnmarshalJSON(data []byte) error {
-	var timeString string
-	if err := json.Unmarshal(data, &timeString); err != nil {
-		return err
-	}
-
-	if timeString == "" {
-		timeString = "0001-01-01"
-	}
-
-	parsedTime, err := time.Parse(time.DateOnly, timeString)
-	if err != nil {
-		parsedTime, err = time.Parse(time.DateTime, timeString)
-		if err != nil {
-			i, err := strconv.ParseInt(timeString, 10, 64)
-			if err != nil {
-				return err
-			}
-			parsedTime = time.Unix(i, 0)
-		}
-	}
-
-	*ts = NaiveDate(parsedTime)
-	return nil
 }
 
 type NaiveDuration time.Duration
@@ -198,18 +200,52 @@ func (nt *NaiveTime) UnmarshalJSON(data []byte) error {
 		timeString = "0001-01-01 00:00:00"
 	}
 
-	parsedTime, err := time.Parse(time.RFC3339, timeString)
+	var dateTimeFormat string
+	switch {
+	case strings.Contains(timeString, "/"):
+		dateTimeFormat = "01/02/2006 15:04:05"
+	case strings.Contains(timeString, "T"):
+		dateTimeFormat = "2006-01-02T15:04:05-07:00"
+	default:
+		dateTimeFormat = "2006-01-02 15:04:05"
+	}
+
+	parsedTime, err := time.Parse(dateTimeFormat, timeString)
 	if err != nil {
-		parsedTime, err = time.Parse("2006-01-02 15:04:05", timeString)
-		if err != nil {
-			i, err := strconv.ParseInt(timeString, 10, 64)
-			if err != nil {
-				return err
-			}
-			parsedTime = time.Unix(i, 0)
-		}
+		message := fmt.Errorf("%+v", err)
+		return message
 	}
 
 	*nt = NaiveTime(parsedTime)
 	return nil
+}
+
+func (n NaiveTime) UnixTimestamp() float64 {
+	return float64(time.Time(n).Unix())
+}
+
+func (n NaiveTime) UtcOffset(timezone string) (int, error) {
+
+	function := `NaiveTime.UtcOffset`
+	l, err := time.LoadLocation(timezone)
+	if err != nil {
+		m := ErrorMessage{
+			Attempted: `time.LoadLocation(timezone)`,
+			Details:   fmt.Sprintf(`Error loading location: %+v`, err),
+			Function:  function,
+			Message:   `bad request`,
+			Payload:   timezone,
+		}
+		fmt.Println("Error loading location:", err)
+		return 0, m
+	}
+
+	t := time.Time(n)
+
+	localised := time.Date(t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), l)
+
+	_, offset := localised.Zone()
+
+	return offset, nil
 }

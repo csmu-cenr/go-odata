@@ -18,6 +18,7 @@ type oDataClient struct {
 
 type ErrorMessage struct {
 	Message    string             `json:"message,omitempty"`
+	Code       string             `json:"code"`
 	ErrorNo    int                `json:"errorNo"`
 	Function   string             `json:"function,omitempty"`
 	Attempted  string             `json:"attempted,omitempty"`
