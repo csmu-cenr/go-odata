@@ -829,6 +829,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 	// Iterate over the fields to be selected
 	for _, fieldName := range fields {
 		// Find the field by JSON tag
+		fieldName = strings.ReplaceAll(fieldName, "\"", "")
 		field, found := findFieldByJSONTag(dataType, fieldName)
 		if !found {
 			// Ignore fields not found in the struct
