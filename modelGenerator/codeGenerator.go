@@ -602,7 +602,7 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
 			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return result, m
 	}
@@ -613,7 +613,7 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
 			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return result, m
 	}
@@ -756,7 +756,7 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 			Attempted:  "PersistentAlias.StructListToMapList",
 			Details:    fmt.Sprintf("%+v", err),
 			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return result, m
 	}
@@ -766,7 +766,7 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 			Attempted:  "PersistentAlias.Marshal",
 			Details:    fmt.Sprintf("%+v", err),
 			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return result, m
 	}
@@ -784,7 +784,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
 			InnerError: err,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return m
 	}
@@ -806,7 +806,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base *{{publicName}}) err
 			ErrorNo:    e.ErrorNo,
 			InnerError: err,
 			Function:   function,
-			Message:    UNEXPECTED_ERROR,
+			Message:    "unexpected error",
 		}
 		return m
 	}
@@ -864,7 +864,7 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 				Details:    fmt.Sprintf("%+v", err),
 				ErrorNo:    http.StatusInternalServerError,
 				InnerError: err,
-				Message:    UNEXPECTED_ERROR,
+				Message:    "unexpected error",
 			}
 			return result, m
 		}
@@ -875,7 +875,7 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 				Details:    fmt.Sprintf("%+v", err),
 				ErrorNo:    http.StatusInternalServerError,
 				InnerError: err,
-				Message:    UNEXPECTED_ERROR,
+				Message:    "unexpected error",
 			}
 			return result, m
 		}
@@ -911,7 +911,7 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 				Attempted: "nullable.SetSelectedBooleanFields",
 				Details: fmt.Sprintf("%+v",err),
 				ErrorNo: http.StatusInternalServerError,
-				Message: UNEXPECTED_ERROR,
+				Message: "unexpected error",
 			}
 			return m
 		}
@@ -995,6 +995,7 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 		}
 		result := make([]map[string]interface{}, 0)
 		for range meta {
+			fields = RemoveEnclosingQuotes(fields)
 			for model := range data {
 				data, err := odataClient.StructToMap(model, fields)
 				if err != nil {
