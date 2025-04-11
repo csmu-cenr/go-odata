@@ -91,10 +91,28 @@ func NaiveDurationFromSeconds(seconds int) NaiveDuration {
 	return NaiveDuration(duration)
 }
 
-// NaiveDuration MarshalJSON returns a duration in the form h:m:s.ms where leading zeros are used where necessary
-func (nd NaiveDuration) MarshalJSON() ([]byte, error) {
+func (n NaiveDuration) Hours() int {
+	duration := time.Duration(n)
+	hours := int(duration.Hours())
+	return hours
+}
 
-	duration := time.Duration(nd)
+func (n NaiveDuration) Minutes() int {
+	duration := time.Duration(n)
+	minutes := int(duration.Minutes()) % 60
+	return minutes
+}
+
+func (n NaiveDuration) Seconds() int {
+	duration := time.Duration(n)
+	seconds := int(duration.Seconds()) % 60
+	return seconds
+}
+
+// NaiveDuration MarshalJSON returns a duration in the form h:m:s.ms where leading zeros are used where necessary
+func (n NaiveDuration) MarshalJSON() ([]byte, error) {
+
+	duration := time.Duration(n)
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
 	seconds := int(duration.Seconds()) % 60
@@ -233,7 +251,7 @@ func (n NaiveTime) UtcOffset(timezone string) (int, error) {
 			Attempted: `time.LoadLocation(timezone)`,
 			Details:   fmt.Sprintf(`Error loading location: %+v`, err),
 			Function:  function,
-			Message:   `bad request`,
+			Message:   BAD_REQUEST,
 			Payload:   timezone,
 		}
 		fmt.Println("Error loading location:", err)
@@ -248,4 +266,19 @@ func (n NaiveTime) UtcOffset(timezone string) (int, error) {
 	_, offset := localised.Zone()
 
 	return offset, nil
+}
+
+func (n NaiveTime) Hour() int {
+	t := time.Time(n)
+	return t.Hour()
+}
+
+func (n NaiveTime) Minute() int {
+	t := time.Time(n)
+	return t.Minute()
+}
+
+func (n NaiveTime) Second() int {
+	t := time.Time(n)
+	return t.Second()
 }
