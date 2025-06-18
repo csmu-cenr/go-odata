@@ -21,6 +21,52 @@ func formatDateTimeWithSeconds(t time.Time) string {
 
 type NaiveDate time.Time
 
+// GreaterThan returns true if left is after right
+func (left NaiveDate) After(right NaiveDate) bool {
+	l := time.Time(left)
+	r := time.Time(right)
+	if r.Year() > l.Year() {
+		return true
+	}
+	if r.Month() > l.Month() {
+		return true
+	}
+	if r.Day() > l.Day() {
+		return true
+	}
+	return false
+}
+
+// Before returns true if left is before right
+func (left NaiveDate) Before(right NaiveDate) bool {
+	l := time.Time(left)
+	r := time.Time(right)
+	if r.Year() < l.Year() {
+		return true
+	}
+	if r.Month() < l.Month() {
+		return true
+	}
+	if r.Day() < l.Day() {
+		return true
+	}
+	return false
+}
+
+// Equals returns true if left and right are the same time
+func (left NaiveDate) Equals(right NaiveDate) bool {
+	l := time.Time(left)
+	r := time.Time(right)
+	if r.Year() == l.Year() {
+		if r.Month() == l.Month() {
+			if r.Day() == l.Day() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (nt NaiveDate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(formatDate(time.Time(nt)))
 }
@@ -91,10 +137,28 @@ func NaiveDurationFromSeconds(seconds int) NaiveDuration {
 	return NaiveDuration(duration)
 }
 
-// NaiveDuration MarshalJSON returns a duration in the form h:m:s.ms where leading zeros are used where necessary
-func (nd NaiveDuration) MarshalJSON() ([]byte, error) {
+func (n NaiveDuration) Hours() int {
+	duration := time.Duration(n)
+	hours := int(duration.Hours())
+	return hours
+}
 
-	duration := time.Duration(nd)
+func (n NaiveDuration) Minutes() int {
+	duration := time.Duration(n)
+	minutes := int(duration.Minutes()) % 60
+	return minutes
+}
+
+func (n NaiveDuration) Seconds() int {
+	duration := time.Duration(n)
+	seconds := int(duration.Seconds()) % 60
+	return seconds
+}
+
+// NaiveDuration MarshalJSON returns a duration in the form h:m:s.ms where leading zeros are used where necessary
+func (n NaiveDuration) MarshalJSON() ([]byte, error) {
+
+	duration := time.Duration(n)
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
 	seconds := int(duration.Seconds()) % 60
@@ -178,6 +242,10 @@ func (o *NaiveDuration) UnmarshalJSON(data []byte) error {
 
 type NaiveTime time.Time
 
+func (n NaiveTime) Time() time.Time {
+	return time.Time(n)
+}
+
 // This drops the timezone information.
 func (o NaiveTime) MarshalJSON() ([]byte, error) {
 	return json.Marshal(formatDateTimeWithSeconds(time.Time(o)))
@@ -202,10 +270,12 @@ func (nt *NaiveTime) UnmarshalJSON(data []byte) error {
 
 	var dateTimeFormat string
 	switch {
-	case strings.Contains(timeString, "/"):
-		dateTimeFormat = "01/02/2006 15:04:05"
+	case strings.Contains(timeString, "T") && strings.Contains(timeString, "Z"):
+		dateTimeFormat = "2006-01-02T15:04:05Z"
 	case strings.Contains(timeString, "T"):
 		dateTimeFormat = "2006-01-02T15:04:05-07:00"
+	case strings.Contains(timeString, "/"):
+		dateTimeFormat = "01/02/2006 15:04:05"
 	default:
 		dateTimeFormat = "2006-01-02 15:04:05"
 	}
@@ -248,4 +318,19 @@ func (n NaiveTime) UtcOffset(timezone string) (int, error) {
 	_, offset := localised.Zone()
 
 	return offset, nil
+}
+
+func (n NaiveTime) Hour() int {
+	t := time.Time(n)
+	return t.Hour()
+}
+
+func (n NaiveTime) Minute() int {
+	t := time.Time(n)
+	return t.Minute()
+}
+
+func (n NaiveTime) Second() int {
+	t := time.Time(n)
+	return t.Second()
 }
