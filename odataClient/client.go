@@ -69,9 +69,11 @@ type ODataQueryOptions struct {
 	Count   string `json:"count,omitempty"`
 	Top     string `json:"top,omitempty"`
 	Skip    string `json:"skip,omitempty"`
+	Limit   string `json:"limit,omitempty"`
 	OrderBy string `json:"orderBy,omitempty"`
 	Format  string `json:"format,omitempty"`
 	Quoted  bool   `json:"quoted"`
+	Escape  bool   `json:"escape"`
 
 	Expand              string `json:"expand,omitempty"`
 	ODataEditLink       string `json:"odataEditLink,omitempty"`

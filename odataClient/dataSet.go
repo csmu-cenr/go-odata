@@ -67,6 +67,12 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		options.Quoted = true
 	}
 
+	if values.Has(ESCAPE) {
+		options.Escape = values.Get(ESCAPE) == TRUE
+	} else {
+		options.Escape = false
+	}
+
 	// Quote the field names if requested
 	if options.Quoted {
 		options.Select = quoteCommaDelimited(values.Get(SELECT))
@@ -186,13 +192,14 @@ func (options ODataQueryOptions) ToQueryString() string {
 		values.Add(ODATAREADLINK, options.ODataReadLink)
 	}
 	result := values.Encode()
-	result = strings.ReplaceAll(result, "%22", `"`) // %22 can stop odata from seeing the field name. swap back to "
+	if options.Escape {
+		result = strings.ReplaceAll(result, "%22", `"`) // %22 can stop odata from seeing the field name. swap back to "
+	}
 	result = strings.ReplaceAll(result, "%24", "$") // sometimes %24 is not recognised as $ - make it explicitly $
 	result = strings.ReplaceAll(result, "%28", "(") // %28 can stop odata from seeing bracketed code swap back to (
 	result = strings.ReplaceAll(result, "%29", ")") // %29 can stop odata from seeing bracketed code swap back to )
 	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
 	result = strings.ReplaceAll(result, "%2F", "/") // %2F stops odata from seeing table identifiers swap back to slashes
-	result = strings.ReplaceAll(result, "%3A", "/") // %3A stops odata from finding some timestamps swap back to colons
 	result = strings.ReplaceAll(result, "%3D", "=") // %3D can stop odata from seeing equal signs swap back to =
 	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
 	return result
@@ -683,49 +690,45 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 // quoteCommaDelimited turns a comma delimited string into a double quoted comma delimited string.
 // Such that 1,"2",3,4,""5"" is returned as "1","2","3","4","5"
 func quoteCommaDelimited(input string) string {
+	delimiter := `"`
+
 	// Split the string by commas
 	parts := strings.Split(input, ",")
 
 	// Process each part, strip existing quotes and enclose in double quotes
 	for i, part := range parts {
 		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
-		parts[i] = fmt.Sprintf(`"%s"`, part)
+		parts[i] = fmt.Sprintf(`%s%s%s`, delimiter, part, delimiter)
 	}
 
 	// Join the parts back together with commas
 	return strings.Join(parts, ",")
 }
 
-// quoteODataFields takes an OData filter string and quotes the specified field names in the fields slice.
+// quoteODataFields takes an OData filter string and quotes the specified field names.
 func quoteODataFields(query string, fields []string) string {
-	// List of OData operations that involve fields
-	operations := []string{"eq", "ne", "gt", "ge", "lt", "le", "and", "or"}
+	if len(fields) == 0 {
+		return query
+	}
 
-	// Create a regex pattern to match field names before any operation
-	fieldPattern := strings.Join(fields, "|")
+	// Create a regex pattern for the field names
+	fieldPattern := `\b(` + strings.Join(fields, "|") + `)\b`
 
-	// Compile a regex to find fields followed by operations, handling optional parentheses and spaces
-	regex := regexp.MustCompile(`(?i)\(?\s*(\b(` + fieldPattern + `)\b)\s*(eq|ne|gt|ge|lt|le|and|or)\s*`)
+	// Compile regex that matches field names when they appear before OData operators
+	regex := regexp.MustCompile(`(?i)(\()?\s*` + fieldPattern + `\s*(eq|ne|gt|ge|lt|le|and|or|not)`)
 
-	// Replace matched fields with quoted field names, ensuring spaces are wrapped around every element
+	// Replace matched field names with quoted versions
 	quotedQuery := regex.ReplaceAllStringFunc(query, func(match string) string {
-		for _, operation := range operations {
-			if strings.Contains(strings.ToLower(match), operation) {
-				// Split the match into parts (field and operator)
-				parts := strings.Fields(match)
-				if len(parts) >= 2 {
-					// Add spaces around field name and operator
-					return fmt.Sprintf(" \"%s\" %s ", parts[0], strings.Join(parts[1:], " "))
-				}
-			}
+		// Re-extract the match groups
+		submatches := regex.FindStringSubmatch(match)
+		if len(submatches) >= 4 {
+			prefix := submatches[1]   // Optional opening paren
+			field := submatches[2]    // The matched field
+			operator := submatches[3] // The matched operator
+			return fmt.Sprintf("%s \"%s\" %s", prefix, field, operator)
 		}
 		return match
 	})
-
-	// Replace any occurrences of multiple spaces with a single space
-	for strings.Contains(quotedQuery, "  ") {
-		quotedQuery = strings.ReplaceAll(quotedQuery, "  ", " ")
-	}
 
 	return quotedQuery
 }
@@ -830,6 +833,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 	// Iterate over the fields to be selected
 	for _, fieldName := range fields {
 		// Find the field by JSON tag
+		fieldName = strings.ReplaceAll(fieldName, "\"", "")
 		field, found := findFieldByJSONTag(dataType, fieldName)
 		if !found {
 			// Ignore fields not found in the struct
