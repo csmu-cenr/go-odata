@@ -200,6 +200,7 @@ func (options ODataQueryOptions) ToQueryString() string {
 	result = strings.ReplaceAll(result, "%29", ")") // %29 can stop odata from seeing bracketed code swap back to )
 	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
 	result = strings.ReplaceAll(result, "%2F", "/") // %2F stops odata from seeing table identifiers swap back to slashes
+	result = strings.ReplaceAll(result, "%3A", ":") // %3A can stop odata from makimg finds against timestamps- swap back to :
 	result = strings.ReplaceAll(result, "%3D", "=") // %3D can stop odata from seeing equal signs swap back to =
 	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
 	return result
