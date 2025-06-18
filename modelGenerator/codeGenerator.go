@@ -440,6 +440,7 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			"\tModId      string                   `json:\"modId,omitempty\"`\n"+
 			"\tPortalData map[string][]interface{} `json:\"portalData,omitempty\"`\n"+
 			"\tRecordId   string                   `json:\"recordId,omitempty\"`\n"+
+			"\tStaffId    int                      `json:\"staffId\"`\n"+
 			"}\n\n",
 		publicName, publicName,
 	)
