@@ -73,6 +73,7 @@ type ODataQueryOptions struct {
 	OrderBy string `json:"orderBy,omitempty"`
 	Format  string `json:"format,omitempty"`
 	Quoted  bool   `json:"quoted"`
+	Escape  bool   `json:"escape"`
 
 	Expand              string `json:"expand,omitempty"`
 	ODataEditLink       string `json:"odataEditLink,omitempty"`
