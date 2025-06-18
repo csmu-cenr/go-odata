@@ -9,6 +9,7 @@ const (
 	CROSSJOIN           = `$crossjoin`
 	DEQUOTE             = `dequote`
 	DOUBLE_SINGLE_QUOTE = `''`
+	ESCAPE              = `escape`
 	EXPAND              = `$expand`
 	FILTER              = `$filter`
 	FORMAT              = `$format`
