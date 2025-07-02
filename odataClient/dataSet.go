@@ -375,9 +375,17 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 				// get the internal error number
 				switch e := err.(type) {
 				case *ErrorMessage:
+					executeHttpRequestError.Body = e.Body
+					executeHttpRequestError.Code = e.Code
+					executeHttpRequestError.Details = e.Details
 					executeHttpRequestError.ErrorNo = e.ErrorNo
+					executeHttpRequestError.Message = e.Message
 				case ErrorMessage:
+					executeHttpRequestError.Body = e.Body
+					executeHttpRequestError.Code = e.Code
+					executeHttpRequestError.Details = e.Details
 					executeHttpRequestError.ErrorNo = e.ErrorNo
+					executeHttpRequestError.Message = e.Message
 				default:
 				}
 
