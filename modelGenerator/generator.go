@@ -31,6 +31,8 @@ type Generator struct {
 		FieldsConstants          string `json:"fieldsConstants"`
 		FieldsPackageName        string
 		Insert                   string `json:"insert"`
+		IgnoreCollections        bool   `json:"ignoreCollections"`
+		IgnoreNullableCheck      bool   `json:"ignoreNullableCheck"`
 		Maps                     string `json:"maps"`
 		Models                   string `json:"models"`
 		Save                     string `json:"save"`
@@ -40,6 +42,7 @@ type Generator struct {
 		TablesPackageName        string
 		Update                   string `json:"update"`
 		UpdateWhere              string `json:"updateWhere"`
+		WrapCollections          bool   `json:"wrapCollections"`
 	} `json:"package"`
 	Fields struct {
 		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName
@@ -111,7 +114,8 @@ func (g Generator) GenerateCode() error {
 		}
 	}
 
-	edmx, err := fetchEdmx(g.metadataUrl())
+	link := g.metadataUrl()
+	edmx, err := fetchEdmx(link)
 	if err != nil {
 		return err
 	}

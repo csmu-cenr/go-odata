@@ -706,32 +706,58 @@ func quoteCommaDelimited(input string) string {
 	return strings.Join(parts, ",")
 }
 
-// quoteODataFields takes an OData filter string and quotes the specified field names.
+// quoteODataFields quotes specified field names in standard OData expressions and function calls.
+// 2025-06-18 Added support for functions - Keith John Hutchison
 func quoteODataFields(query string, fields []string) string {
 	if len(fields) == 0 {
 		return query
 	}
 
-	// Create a regex pattern for the field names
+	// --- Step 1: Quote field names used with standard operators ---
+	// List of supported OData operators
+	operators := []string{
+		"eq", "ne", "gt", "ge", "lt", "le",
+		"and", "or", "not",
+		"add", "sub", "mul", "div", "mod",
+	}
+
+	// Build regex pattern for fields followed by operators
 	fieldPattern := `\b(` + strings.Join(fields, "|") + `)\b`
+	operatorPattern := strings.Join(operators, "|")
+	regex := regexp.MustCompile(`(?i)(\(?\s*)` + fieldPattern + `(\s+)(` + operatorPattern + `)\b`)
 
-	// Compile regex that matches field names when they appear before OData operators
-	regex := regexp.MustCompile(`(?i)(\()?\s*` + fieldPattern + `\s*(eq|ne|gt|ge|lt|le|and|or|not)`)
-
-	// Replace matched field names with quoted versions
-	quotedQuery := regex.ReplaceAllStringFunc(query, func(match string) string {
-		// Re-extract the match groups
-		submatches := regex.FindStringSubmatch(match)
-		if len(submatches) >= 4 {
-			prefix := submatches[1]   // Optional opening paren
-			field := submatches[2]    // The matched field
-			operator := submatches[3] // The matched operator
-			return fmt.Sprintf("%s \"%s\" %s", prefix, field, operator)
+	// Replace matched fields with quoted versions
+	result := regex.ReplaceAllStringFunc(query, func(match string) string {
+		sub := regex.FindStringSubmatch(match)
+		if len(sub) >= 4 {
+			prefix := sub[1]
+			field := sub[2]
+			space := sub[3]
+			operator := sub[4]
+			return fmt.Sprintf("%s\"%s\"%s%s", prefix, field, space, operator)
 		}
 		return match
 	})
 
-	return quotedQuery
+	// --- Step 2: Quote field names used in function calls ---
+	// e.g., contains(field, 'value') → contains("field", 'value')
+	funcNames := []string{"startswith", "endswith", "contains", "length", "tolower", "toupper", "trim", "substring"}
+
+	// Build regex to match function calls with the field as first argument
+	funcPattern := `(?i)\b(` + strings.Join(funcNames, "|") + `)\(\s*(` + strings.Join(fields, "|") + `)\s*,`
+
+	funcRegex := regexp.MustCompile(funcPattern)
+	result = funcRegex.ReplaceAllStringFunc(result, func(match string) string {
+		sub := funcRegex.FindStringSubmatch(match)
+		if len(sub) >= 3 {
+			funcName := sub[1]
+			field := sub[2]
+			return fmt.Sprintf(`%s("%s",`, funcName, field)
+		}
+		return match
+	})
+
+	return result
 }
 
 // removeEmptyKeys resolves an issue when the odata source sends back an invalid editlink with an empty string key

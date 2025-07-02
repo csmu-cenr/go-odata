@@ -421,7 +421,10 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			if g.Fields.Pointers {
 				pointer = "*"
 			}
-			goType := prop.goType()
+			goType := prop.goType(
+				g.Package.IgnoreNullableCheck,
+				g.Package.IgnoreCollections,
+				g.Package.WrapCollections)
 			if value, ok := g.Fields.Swap[goType]; ok {
 				goType = value
 			}

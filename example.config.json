@@ -2,16 +2,20 @@
 	"apiUrl": "https://services.odata.org/TripPinRESTierService/(S(c0y0kjlx4yjoxry4otnmoxf4))/",
 	"package": {
 		"createDirectoryIfMissing": true,
-		"directory": "dataModel/",
-		"fieldsConstants": "../depot-maestro/fields/constants.go",
-		"tablesConstants": "../depot-maestro/tables/constants.go",
-		"models": "models.go",
-		"selectByTableName": "selectByTableName.go",
-		"select": "select.go",
-		"update": "update.go",
 		"datasets": "datasets.go",
+		"directory": "dataModel/",
+		"extras": "extras",
+		"fieldsConstants": "../your-project/fields/constants.go",
+		"ignoreCollections": true,
+		"ignoreNullableCheck": true,
+		"insert": "insert.go",
 		"maps": "maps.go",
-		"extras": "extras"
+		"models": "models.go",
+		"select": "select.go",
+		"selectByTableName": "selectByTableName.go",
+		"tablesConstants": "../your-project/tables/constants.go",
+		"update": "update.go",
+		"wrapCollections": true
 	},
 	"fields": {
 		"quoted": true,

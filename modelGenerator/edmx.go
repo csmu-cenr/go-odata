@@ -54,7 +54,7 @@ type edmxCollection struct {
 	EnumMember *[]string `xml:"Enum,omitempty"`
 }
 
-func (p edmxProperty) goType() string {
+func (p edmxProperty) goType(ignoreNullableCheck, ignoreCollections, wrapCollections bool) string {
 	propertyType := p.Type
 	isCollection := false
 	if strings.HasPrefix(p.Type, "Collection(") {
@@ -99,13 +99,18 @@ func (p edmxProperty) goType() string {
 		}
 	}
 
-	if !isCollection && (p.Nullable == "" || strings.ToLower(p.Nullable) == "true") {
+	if !isCollection && (p.Nullable == "" || strings.ToLower(p.Nullable) == "true" || ignoreNullableCheck) {
 		goType = "nullable.Nullable[" + goType + "]"
 	}
 
-	if isCollection {
-		goType = "[]" + goType
+	if isCollection && !ignoreCollections {
+		if wrapCollections {
+			goType = "[]" + "nullable.Nullable[" + goType + "]"
+		} else {
+			goType = "[]" + goType
+		}
 	}
+
 	return goType
 }
 

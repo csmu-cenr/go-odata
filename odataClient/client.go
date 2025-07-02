@@ -161,7 +161,7 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 // executeHttpRequest
 func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
 
-	functionName := `executeHttpRequest`
+	function := `executeHttpRequest`
 	link := getFullURL(req)
 
 	client.mapHeadersToRequest(req)
@@ -169,37 +169,47 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	var responseData T
 	if err != nil {
 		httpClientDoError := ErrorMessage{
-			Function:   functionName,
+			Function:   function,
 			Attempted:  "client.httpClient.Do(req)",
 			InnerError: err,
 			RequestUrl: link,
-			ErrorNo:    http.StatusInternalServerError}
+			ErrorNo:    response.StatusCode,
+		}
 		return responseData, httpClientDoError
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		message := ErrorMessage{
-			Function:   "executeHttpRequest",
+			Function:   function,
 			Attempted:  "body, err := io.ReadAll(response.Body)",
 			InnerError: err,
 			RequestUrl: link,
-			ErrorNo:    http.StatusInternalServerError}
+			ErrorNo:    response.StatusCode}
 		return responseData, message
 	}
 	if response.StatusCode >= http.StatusBadRequest {
-		message := ErrorMessage{Function: "executeHttpRequest",
+		m := ErrorMessage{Function: function,
 			Attempted:  "response, err := client.httpClient.Do(req)",
 			RequestUrl: link,
 			ErrorNo:    response.StatusCode}
 		var data map[string]interface{}
 		err := json.Unmarshal(body, &data)
 		if err != nil {
-			message.Details = string(body)
-			return responseData, message
+			m.Body = string(body)
+			return responseData, m
 		}
-		message.Details = data
-		return responseData, message
+		// FileMaker Error Struct
+		if errVal, ok := data["error"]; ok {
+			if errMap, ok := errVal.(map[string]interface{}); ok {
+				code, _ := errMap["code"].(string)
+				message, _ := errMap["message"].(string)
+				m.Code = code
+				m.Message = message
+			}
+		}
+		m.Details = data
+		return responseData, m
 	}
 	if response.StatusCode == http.StatusNoContent {
 		return responseData, nil
