@@ -380,12 +380,14 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 					executeHttpRequestError.Details = e.Details
 					executeHttpRequestError.ErrorNo = e.ErrorNo
 					executeHttpRequestError.Message = e.Message
+					executeHttpRequestError.RequestUrl = e.RequestUrl
 				case ErrorMessage:
 					executeHttpRequestError.Body = e.Body
 					executeHttpRequestError.Code = e.Code
 					executeHttpRequestError.Details = e.Details
 					executeHttpRequestError.ErrorNo = e.ErrorNo
 					executeHttpRequestError.Message = e.Message
+					executeHttpRequestError.RequestUrl = e.RequestUrl
 				default:
 				}
 
