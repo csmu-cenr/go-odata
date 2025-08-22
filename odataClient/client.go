@@ -27,6 +27,7 @@ type ErrorMessage struct {
 	Options    *ODataQueryOptions `json:"options,omitempty"`
 	Payload    interface{}        `json:"payload"`
 	InnerError interface{}        `json:"err,omitempty"`
+	Exit       int                `json:"exit"`
 	RequestUrl string             `json:"requestUrl,omitempty"`
 }
 
