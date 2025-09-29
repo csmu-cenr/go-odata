@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/Uffe-Code/go-nullable/nullable"
@@ -12,11 +13,11 @@ import (
 )
 
 type testModel struct {
-	Id          int
-	Number      string
-	Name        string
-	ParentId    nullable.Nullable[int]
-	Description nullable.Nullable[string]
+	Id          int                       `json:"id"`
+	Number      string                    `json:"number"`
+	Name        string                    `json:"name"`
+	ParentId    nullable.Nullable[int]    `json:"parentId"`
+	Description nullable.Nullable[string] `json:"description"`
 }
 
 type testModelDefinition[T any] struct {
@@ -78,7 +79,7 @@ func TestOdataDataSet_Single(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	model, err := dataSet.Single("5")
+	model, err := dataSet.Single("5", ODataQueryOptions{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, model.Id)
 	assert.Equal(t, "002", model.Number)
@@ -122,7 +123,7 @@ func TestOdataDataSet_List(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	models, _ := dataSet.List(ODataFilter{})
+	_, models, _ := dataSet.List(ODataQueryOptions{})
 
 	i := 0
 	for model := range models {
@@ -170,7 +171,8 @@ func Test_Insert(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
-	res, err := dataSet.Insert(model)
+	tags := []string{`id`, `number`, `name`, `parentId`, `description`}
+	res, err := dataSet.Insert(model, tags)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
 	assert.False(t, res.ParentId.IsValid)
@@ -207,7 +209,7 @@ func Test_Update(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
-	res, err := dataSet.Update("5", model)
+	res, err := dataSet.Update("5", model, url.Values{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, res.Id)
 	assert.False(t, res.ParentId.IsValid)

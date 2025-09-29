@@ -160,7 +160,7 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 }
 
 // executeHttpRequest
-func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
+func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error) {
 
 	function := `executeHttpRequest`
 	link := getFullURL(req)
@@ -233,10 +233,13 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 		err = json.Unmarshal(sanitised, &responseData)
 		if err != nil {
 			message := ErrorMessage{
-				ErrorNo: http.StatusInternalServerError,
-				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
-				Attempted: "err = json.Unmarshal(sanitised, &responseData)",
-				Body:      string(sanitised), InnerError: err}
+				Attempted:  "err = json.Unmarshal(sanitised, &responseData)",
+				Body:       string(sanitised),
+				ErrorNo:    http.StatusInternalServerError,
+				Function:   "odataClient.executeHttpRequest",
+				InnerError: err,
+				Message:    fmt.Sprintf(`%+v`, err),
+			}
 			return responseData, message
 		}
 	}
@@ -311,12 +314,14 @@ func executeHttpRequestPayload[T interface{}](client oDataClient, req *http.Requ
 		err = json.Unmarshal(sanitised, &responseData)
 		if err != nil {
 			message := ErrorMessage{
-				ErrorNo: http.StatusInternalServerError,
-				Message: fmt.Sprintf(`%w`, err), Function: "odataClient.executeHttpRequest",
 				Attempted:  "err = json.Unmarshal(sanitised, &responseData)",
 				Body:       string(sanitised),
+				ErrorNo:    http.StatusInternalServerError,
+				Function:   "odataClient.executeHttpRequest",
+				InnerError: err,
+				Message:    fmt.Sprintf(`%+v`, err),
 				Payload:    payload,
-				InnerError: err}
+			}
 			return responseData, message
 		}
 	}

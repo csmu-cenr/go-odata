@@ -20,16 +20,6 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 	return reflect.StructField{}, false
 }
 
-func hasField(typ reflect.Type, fieldName string) bool {
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.Name == fieldName {
-			return true
-		}
-	}
-	return false
-}
-
 // TODO Swap for official struct field is public function
 func isFirstLetterCapital(s string) bool {
 	// Check if the string is not empty
@@ -45,7 +35,7 @@ func isFirstLetterCapital(s string) bool {
 }
 
 // StructListToInterface converts a list of structs to an interface
-func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
+func StructListToInterface(data any, fields []string) (interface{}, error) {
 	return StructListToMapList(data, fields)
 }
 

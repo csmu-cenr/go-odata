@@ -1,13 +1,15 @@
 package modelGenerator
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_Generate_struct(t *testing.T) {
 	edmx, _ := getParsedEdmx()
 	peopleSet := edmx.EntitySets["People"]
+	g := Generator{}
 
 	assert.Equal(t, `type Person struct {
 	AddressInfo []Location
@@ -21,7 +23,7 @@ func Test_Generate_struct(t *testing.T) {
 	LastName nullable.Nullable[string]
 	MiddleName nullable.Nullable[string]
 	UserName string
-}`, generateModelStruct(peopleSet.getEntityType()))
+}`, g.generateModelStruct(peopleSet.getEntityType()))
 }
 
 func Test_Generate_definition(t *testing.T) {

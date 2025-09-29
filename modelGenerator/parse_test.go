@@ -1,8 +1,9 @@
 package modelGenerator
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var trippinEdmxSchema = `<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
@@ -200,11 +201,11 @@ func Test_Parse_edmx(t *testing.T) {
 	usernameProperty, ok := personEntityType.Properties["UserName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", usernameProperty.Type)
-	assert.Equal(t, "string", usernameProperty.goType())
+	assert.Equal(t, "string", usernameProperty.goType(true, false, false))
 	lastNameProperty, ok := personEntityType.Properties["LastName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", lastNameProperty.Type)
-	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType())
+	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType(true, false, false))
 
 	peopleEntitySet := edmx.EntitySets["People"]
 	assert.Equal(t, "Trippin.Person", peopleEntitySet.EntityType)

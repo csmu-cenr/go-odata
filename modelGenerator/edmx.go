@@ -164,17 +164,17 @@ type rawEdmxDataServices struct {
 	Schemas []rawEdmxSchema `xml:"Schema"`
 }
 
-func (ds *rawEdmxDataServices) toKeys() map[int][]string {
-	keys := map[int][]string{}
-	index := 0
-	for _, schema := range ds.Schemas {
-		for _, entityType := range schema.EntityTypes {
-			keys[index] = append(keys[index], entityType.Name)
-		}
-		index++
-	}
-	return keys
-}
+// func (ds *rawEdmxDataServices) toKeys() map[int][]string {
+// 	keys := map[int][]string{}
+// 	index := 0
+// 	for _, schema := range ds.Schemas {
+// 		for _, entityType := range schema.EntityTypes {
+// 			keys[index] = append(keys[index], entityType.Name)
+// 		}
+// 		index++
+// 	}
+// 	return keys
+// }
 
 func (ds *rawEdmxDataServices) toDataService() edmxDataServices {
 	dataService := &edmxDataServices{Schemas: map[string]edmxSchema{}}
