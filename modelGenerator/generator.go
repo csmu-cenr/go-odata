@@ -19,47 +19,66 @@ func (e ModelGeneratorError) Error() string {
 	return string(bytes)
 }
 
+type Fields struct {
+	Extras      []string          `json:"extras"`
+	Ignore      Ignore            `json:"ignore"`
+	Json        JsonTags          `json:"json"`
+	Mandatory   []Mandatory       `json:"mandatory"`
+	Public      bool              `json:"public"` // Change a_field__name__ to AFieldName
+	Pointers    bool              `json:"pointers"`
+	ReadOnlyTag string            `json:"readOnlyTag"`
+	Swap        map[string]string `json:"swap"`
+}
+
+type Ignore struct {
+	StartsWith []string `json:"startsWith"`
+	Contains   []string `json:"contains"`
+	EndsWith   []string `json:"endsWith"`
+	Equals     []string `json:"equals"`
+}
+
+type JsonTags struct {
+	Tags      bool `json:"tags"`
+	OmitEmpty bool `json:"omitempty"`
+}
+
 type Generator struct {
-	ApiUrl  string `json:"apiUrl"`
-	Package struct {
-		CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
-		Datasets                 string `json:"datasets"`
-		Delete                   string `json:"delete"`
-		DeleteWhere              string `json:"deleteWhere"`
-		Directory                string `json:"directory"`
-		Extras                   string `json:"extras"`
-		FieldsConstants          string `json:"fieldsConstants"`
-		FieldsPackageName        string
-		Insert                   string `json:"insert"`
-		IgnoreCollections        bool   `json:"ignoreCollections"`
-		IgnoreNullableCheck      bool   `json:"ignoreNullableCheck"`
-		Maps                     string `json:"maps"`
-		Models                   string `json:"models"`
-		Save                     string `json:"save"`
-		Select                   string `json:"select"`
-		SelectByTableName        string `json:"selectByTableName"`
-		TablesConstants          string `json:"tablesConstants"`
-		TablesPackageName        string
-		Update                   string `json:"update"`
-		UpdateWhere              string `json:"updateWhere"`
-		WrapCollections          bool   `json:"wrapCollections"`
-	} `json:"package"`
-	Fields struct {
-		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName
-		Pointers bool              `json:"pointers"`
-		Swap     map[string]string `json:"swap"`
-		Json     struct {
-			Tags      bool `json:"tags"`
-			OmitEmpty bool `json:"omitempty"`
-		} `json:"json"`
-		Extras []string `json:"extras"`
-		Ignore struct {
-			StartsWith []string `json:"startsWith"`
-			Contains   []string `json:"contains"`
-			EndsWith   []string `json:"endsWith"`
-			Equals     []string `json:"equals"`
-		} `json:"ignore"`
-	} `json:"fields"`
+	ApiUrl  string  `json:"apiUrl"`
+	Package Package `json:"package"`
+	Fields  Fields  `json:"fields"`
+}
+
+type Mandatory struct {
+	Name     string `json:"name"`
+	Selected bool   `json:"selected"`
+	Valid    bool   `json:"valid"`
+}
+
+type Package struct {
+	CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
+	Datasets                 string `json:"datasets"`
+	Delete                   string `json:"delete"`
+	DeleteWhere              string `json:"deleteWhere"`
+	Directory                string `json:"directory"`
+	Extras                   string `json:"extras"`
+	FieldsConstants          string `json:"fieldsConstants"`
+	FieldsPackageName        string `json:"fieldsPackageName"`
+	Insert                   string `json:"insert"`
+	IgnoreCollections        bool   `json:"ignoreCollections"`
+	IgnoreNullableCheck      bool   `json:"ignoreNullableCheck"`
+	Maps                     string `json:"maps"`
+	Models                   string `json:"models"`
+	Name                     string `json:"-"`
+	OdataAlias               string `json:"odataAlias"`
+	Save                     string `json:"save"`
+	SaveByTableName          string `json:"saveByTableName"`
+	Select                   string `json:"select"`
+	SelectByTableName        string `json:"selectByTableName"`
+	TablesConstants          string `json:"tablesConstants"`
+	TablesPackageName        string
+	Update                   string `json:"update"`
+	UpdateWhere              string `json:"updateWhere"`
+	WrapCollections          bool   `json:"wrapCollections"`
 }
 
 func New(path string) (Generator, error) {
@@ -121,7 +140,8 @@ func (g Generator) GenerateCode() error {
 	}
 
 	packageName := filepath.Base(dirPath)
-	code := g.generateCodeFromSchema(packageName, edmx)
+	g.Package.Name = packageName
+	code := g.CodeFromSchema(edmx)
 	for fileName, contents := range code {
 		filePath := fmt.Sprintf("%s%s%s", dirPath, string(filepath.Separator), fileName)
 		file, err := os.Create(filePath)
@@ -185,7 +205,7 @@ func (g Generator) GenerateCode() error {
 		}
 	}
 	g.Package.FieldsPackageName = filepath.Base(fieldsPath)
-	contents = g.generateFieldConstants(edmx)
+	contents = g.FieldConstants(edmx)
 	file, err = os.Create(g.Package.FieldsConstants)
 	if err != nil {
 		return err

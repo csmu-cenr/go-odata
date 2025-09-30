@@ -19,9 +19,9 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Get(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
-	Single(id string, options ODataQueryOptions) (ModelT, error)
-	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
-	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
+	Singular(id string, options ODataQueryOptions) (ModelT, error)
+	SingularValue(id string, options ODataQueryOptions) (ModelT, error)
+	Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, tags []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	UpdateByFilter(model ModelT, tags []string, options ODataQueryOptions) error

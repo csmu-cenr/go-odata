@@ -54,7 +54,7 @@ type edmxCollection struct {
 	EnumMember *[]string `xml:"Enum,omitempty"`
 }
 
-func (p edmxProperty) goType(ignoreNullableCheck, ignoreCollections, wrapCollections bool) string {
+func (p edmxProperty) goType(ignoreNullableCheck, ignoreCollections, wrapCollections, readOnly bool) string {
 	propertyType := p.Type
 	isCollection := false
 	if strings.HasPrefix(p.Type, "Collection(") {
@@ -109,6 +109,10 @@ func (p edmxProperty) goType(ignoreNullableCheck, ignoreCollections, wrapCollect
 		} else {
 			goType = "[]" + goType
 		}
+	}
+
+	if readOnly {
+		goType = strings.ReplaceAll(goType, "Nullable", "ReadOnly")
 	}
 
 	return goType

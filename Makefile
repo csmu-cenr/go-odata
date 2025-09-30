@@ -21,6 +21,9 @@ copy:
 	@echo "Copying go-data to /usr/local/bin/..."
 	@cp go-odata /usr/local/bin/
 	
+count:
+	./count-git-commits-across-all-branches.sh
+	
 finished:
 	@echo "Finished."
 
@@ -39,8 +42,9 @@ run:
 starting:
 	@echo "Starting."
 	
-version:
-	@echo "Showing versions using 'git tag -n1'"
-	@git tag -n1
+tags:
+	git tag -n1 | sort -r | head -n 5
 	
+version:
+	git tag -n1	
 	

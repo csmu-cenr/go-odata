@@ -45,16 +45,19 @@ func publicAttribute(property string) string {
 	return snakeCaseToTitleCase(property)
 }
 
-func generateModelDefinition(set edmxEntitySet) string {
+func (g Generator) ModelDefinition(set edmxEntitySet) string {
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	return fmt.Sprintf(`//goland:noinspection GoUnusedExportedFunction
-func New%sCollection(wrapper odataClient.Wrapper) odataClient.ODataModelCollection[%s] {
-	return modelDefinition[%s]{client: wrapper.ODataClient(), name: "%s", url: "%s"}
-}`, publicName, publicName, publicName, publicName, set.Name)
+	result := fmt.Sprintf(`//goland:noinspection GoUnusedExportedFunction
+	func New{{publicName}}Collection(wrapper {{g.Package.OdataAlias}}.Wrapper) {{g.Package.OdataAlias}}.ODataModelCollection[{{publicName}}] {
+		return modelDefinition[{{publicName}}]{client: wrapper.ODataClient(), name: "publicName", url: "%s"}
+	}`, set.Name)
+	result = strings.ReplaceAll(result, `{{g.Package.OdataAlias}}`, g.Package.OdataAlias)
+	result = strings.ReplaceAll(result, `{{publicName}}`, publicName)
+	return result
 }
 
-func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxDataServices) map[string]string {
+func (g *Generator) CodeFromSchema(dataService edmxDataServices) map[string]string {
 
 	code := map[string]string{}
 
@@ -69,7 +72,7 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 		Model  string      
 		Uuid   string      
 		Id     float64     
-		Record interface{} 
+		Record any 
 	}
 
 	func (e NilModel) Error() string {
@@ -90,9 +93,10 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	deleteCode := fmt.Sprintf(`package %s
 	
 	import (
-		"github.com/Uffe-Code/go-odata/odataClient"
+		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
-	`, packageName)
+	`, g.Package.Name)
+	deleteCode = strings.ReplaceAll(deleteCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	updateCode := fmt.Sprintf(`package %s
 	
@@ -103,10 +107,11 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/Uffe-Code/go-nullable/nullable"
-	"github.com/Uffe-Code/go-odata/odataClient"
+	nullable "github.com/Uffe-Code/go-nullable/nullable"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, g.Package.Name)
+	updateCode = strings.ReplaceAll(updateCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	insertCode := fmt.Sprintf(`package %s
 	
@@ -115,10 +120,11 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/Uffe-Code/go-nullable/nullable"
-	"github.com/Uffe-Code/go-odata/odataClient"
+	nullable "github.com/Uffe-Code/go-nullable/nullable"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, g.Package.Name)
+	insertCode = strings.ReplaceAll(insertCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	modelCode := fmt.Sprintf(`package %s
 
@@ -126,13 +132,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Uffe-Code/go-nullable/nullable"
-	"github.com/Uffe-Code/go-odata/odataClient"
-	"github.com/Uffe-Code/go-odata/date"
+	nullable "github.com/Uffe-Code/go-nullable/nullable"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
+	date "github.com/Uffe-Code/go-odata/date"
 	
 )
 
-type modelDefinition[T any] struct { client odataClient.ODataClient; name string; url string }
+type modelDefinition[T any] struct { client {{g.Package.OdataAlias}}.ODataClient; name string; url string }
 
 func (md modelDefinition[T]) Name() string {
 	return md.name
@@ -142,27 +148,28 @@ func (md modelDefinition[T]) Url() string {
 	return md.url
 }
 
-func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.ODataModelDefinition[T]] {
-	return odataClient.NewDataSet[T](md.client, md)
+func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, {{g.Package.OdataAlias}}.ODataModelDefinition[T]] {
+	return {{g.Package.OdataAlias}}.NewDataSet[T](md.client, md)
 }
 
 %s
 
-`, packageName, customErrors)
+`, g.Package.Name, customErrors)
+	modelCode = strings.ReplaceAll(modelCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
-	selectByTableNameCode := fmt.Sprintf(`package %s
+	selectByTableName := fmt.Sprintf(`package %s
 
 	import (
 		"net/url"
 		"strings"
 	
-		"github.com/Uffe-Code/go-odata/odataClient"
+		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
 	
 
-	func SelectByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string) ([]map[string]interface{}, error) {
+	func SelectByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string) ([]map[string]any, error) {
 
-		client := odataClient.New(link)
+		client := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
 			client.AddHeader(key, value)
 		}
@@ -171,10 +178,37 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 		switch tableName {
 
-	`, packageName)
+	`, g.Package.Name)
 
 	selectByTableNameOptions := `options`
-	selectByTableNameCode = strings.ReplaceAll(selectByTableNameCode, "{{options}}", selectByTableNameOptions)
+	selectByTableName = strings.ReplaceAll(selectByTableName, "{{options}}", selectByTableNameOptions)
+	selectByTableName = strings.ReplaceAll(selectByTableName, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
+
+	saveByTableName := fmt.Sprintf(`package %s
+
+	import (
+		"net/url"
+		"strings"
+	
+		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
+	)
+	
+
+	func SaveByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link, data []byte) (results map[string][]map[string]any, messages []error) {
+
+		client := {{g.Package.OdataAlias}}.New(link)
+		for key, value := range headers {
+			client.AddHeader(key, value)
+		}
+		{{options}} := client.ODataQueryOptions()
+		options = {{options}}.ApplyArguments(defaultFilter, values)
+
+		switch tableName {
+
+	`, g.Package.Name)
+	saveByTableNameOptions := `options`
+	saveByTableName = strings.ReplaceAll(saveByTableName, "{{options}}", saveByTableNameOptions)
+	saveByTableName = strings.ReplaceAll(saveByTableName, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	saveCode := fmt.Sprintf(`package %s
 
@@ -185,19 +219,20 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 		"net/url"
 		"reflect"
 			
-		"github.com/Uffe-Code/go-nullable/nullable"
+		nullable "github.com/Uffe-Code/go-nullable/nullable"
 	)
 
-`, packageName)
+`, g.Package.Name)
 
 	datasets := fmt.Sprintf(`
 package %s
 	
 import (
-	"github.com/Uffe-Code/go-odata/odataClient"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 )
 
-	`, packageName)
+	`, g.Package.Name)
+	datasets = strings.ReplaceAll(datasets, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	selectCode := fmt.Sprintf(`
 package %s
@@ -208,11 +243,12 @@ import (
 	"net/url"
 	"reflect"
 
-	"github.com/Uffe-Code/go-nullable/nullable"
-	"github.com/Uffe-Code/go-odata/odataClient"
+	nullable "github.com/Uffe-Code/go-nullable/nullable"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, g.Package.Name)
+	selectCode = strings.ReplaceAll(selectCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	mapCode := fmt.Sprintf(`package %s
 
@@ -221,18 +257,19 @@ import (
 	"net/url"
 	"strings"
 	
-	"github.com/Uffe-Code/go-odata/odataClient"
+	{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, g.Package.Name)
+	mapCode = strings.ReplaceAll(mapCode, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
-			modelCode += "\n" + generateEnumStruct(enum) + "\n"
+			modelCode += "\n" + g.EnumStruct(enum) + "\n"
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			modelCode += "\n" + g.generateModelStruct(complexType) + "\n"
+			modelCode += "\n" + g.generateModelStruct(complexType, map[string]string{}) + "\n"
 		}
 
 		var names []string
@@ -244,32 +281,48 @@ import (
 		})
 
 		for _, name := range names {
+
+			fields := map[string]string{}
+
 			set := schema.EntitySets[name]
-			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
-			deleteCode += "\n" + generateDeleteCode(set, "client", "odataClient") + "\n"
-			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
-			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
-			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
-			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			saveCode += "\n" + generateSaveCode(set) + "\n"
-			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
-			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
-			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
+			datasets += "\n" + g.DataSet(set) + "\n"
+			deleteCode += "\n" + g.DeleteCode(set) + "\n"
+			insertCode += "\n" + g.InsertCode(set) + "\n"
+			mapCode += "\n" + g.MapFunctionCode(set) + "\n"
+			modelCode += "\n" + g.generateModelStruct(set.getEntityType(), fields) + "\n"
+			modelCode += "\n" + g.ModelDefinition(set) + "\n"
+			saveCode += "\n" + g.SaveCode(set) + "\n"
+			selectByTableName += "\n" + g.SelectByTableName(set, selectByTableNameOptions) + "\n"
+			saveByTableName += "\n" + g.SaveByTableName(set, fields) + "\n"
+			selectCode += "\n" + g.SelectCode(set) + "\n"
+			updateCode += "\n" + g.UpdateCode(set) + "\n"
 		}
 	}
 
-	selectByTableNameCode += `
+	selectByTableName += `
 	default:
 		return nil, nil
 	}
 	return nil, nil
 }
 	`
+
+	saveByTableName += `
+	default:
+		return nil, nil
+	}
+return nil, nil
+}
+`
+
 	if g.Package.Models != "" {
 		code[g.Package.Models] = modelCode
 	}
 	if g.Package.SelectByTableName != "" {
-		code[g.Package.SelectByTableName] = selectByTableNameCode
+		code[g.Package.SelectByTableName] = selectByTableName
+	}
+	if g.Package.SaveByTableName != "" {
+		code[g.Package.SaveByTableName] = saveByTableName
 	}
 	if g.Package.Select != "" {
 		code[g.Package.Select] = selectCode
@@ -292,7 +345,7 @@ import (
 	if g.Package.Delete != "" {
 		code[g.Package.Delete] = deleteCode
 	}
-	packageLine := fmt.Sprintf("package %s", packageName)
+	packageLine := fmt.Sprintf("package %s", g.Package.Name)
 
 	files, err := os.ReadDir(g.Package.Extras)
 	if err != nil {
@@ -312,7 +365,8 @@ import (
 	return code
 }
 
-func (g *Generator) generateFieldConstants(dataService edmxDataServices) string {
+func (g *Generator) FieldConstants(dataService edmxDataServices) string {
+
 	result := fmt.Sprintf("package %s\n", g.Package.FieldsPackageName)
 
 	for _, schema := range dataService.Schemas {
@@ -345,11 +399,14 @@ func (g *Generator) generateFieldConstants(dataService edmxDataServices) string 
 	return result
 }
 
-func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
+func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[string]string) string {
 
 	publicName := publicAttribute(entityType.Name)
 	structString := fmt.Sprintf("type %s struct {", publicName)
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+	readOnlyTag := g.Fields.ReadOnlyTag
+	readOnly := false
 
 	jsonSupport := ""
 	name := ""
@@ -362,10 +419,12 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 	for _, propertyKey := range propertyKeys {
 		include := g.validPropertyName(propertyKey)
 		if include {
+			readOnly = false
 			prop := entityType.Properties[propertyKey]
 			name = prop.Name
 			if g.Fields.Public {
 				name = publicAttribute(name)
+				fields[propertyKey] = propertyKey
 			}
 			if g.Fields.Json.Tags {
 				jsonSupport = prop.Name
@@ -395,6 +454,9 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 					} else {
 						mapped := map[string]string{}
 						for _, enum := range *annotation.EnumMember {
+							if enum == readOnlyTag {
+								readOnly = true
+							}
 							mapped[enum] = ""
 						}
 						annotations[annotation.Term] = mapped
@@ -424,7 +486,8 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			goType := prop.goType(
 				g.Package.IgnoreNullableCheck,
 				g.Package.IgnoreCollections,
-				g.Package.WrapCollections)
+				g.Package.WrapCollections,
+				readOnly)
 			if value, ok := g.Fields.Swap[goType]; ok {
 				goType = value
 			}
@@ -441,7 +504,7 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			"\tFieldData  %s                       `json:\"fieldData\"`\n"+
 			"\tModel      string                   `json:\"model,omitempty\"`\n"+
 			"\tModId      string                   `json:\"modId,omitempty\"`\n"+
-			"\tPortalData map[string][]interface{} `json:\"portalData,omitempty\"`\n"+
+			"\tPortalData map[string][]any `json:\"portalData,omitempty\"`\n"+
 			"\tRecordId   string                   `json:\"recordId,omitempty\"`\n"+
 			"\tStaffId    int                      `json:\"staffId\"`\n"+
 			"}\n\n",
@@ -497,51 +560,51 @@ func (g *Generator) validPropertyName(property string) bool {
 	return true
 }
 
-func generateDataSet(set edmxEntitySet, client string, packageName string) string {
+func (g Generator) DataSet(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}DataSet(headers map[string]string, link string) odataClient.ODataDataSet[{{publicName}}, odataClient.ODataModelDefinition[{{publicName}}]] {
-		{{client}} := {{packageName}}.New(link)
+	result := `func {{publicName}}DataSet(headers map[string]string, link string) {{g.Package.Name}}.ODataDataSet[{{publicName}}, {{g.Package.OdataAlias}}.ODataModelDefinition[{{publicName}}]] {
+		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
 		for key, value := range headers {
-			{{client}}.AddHeader(key, value)
+			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
-		collection := New{{publicName}}Collection({{client}})
+		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
 		return dataset
 	}`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
+	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
 	return result
 }
 
-func generateDeleteCode(set edmxEntitySet, client string, packageName string) string {
+func (g Generator) DeleteCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 
 	result := `func (o *{{publicName}}) Delete(headers map[string]string, link string) error {
 
-	{{client}} := {{packageName}}.New(link)
+	{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
 	for key, value := range headers {
-		{{client}}.AddHeader(key, value)
+		{{g.Package.OdataAlias}}.AddHeader(key, value)
 	}
 	
-	collection := New{{publicName}}Collection({{client}})
+	collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 	dataset := collection.DataSet()
 	
 	return dataset.Delete(o.ODataEditLink)
 }`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 
 	return result
 
 }
 
-func generateEnumStruct(enum edmxEnumType) string {
+func (g Generator) EnumStruct(enum edmxEnumType) string {
 	stringValues := map[string]string{}
 	intValues := map[int64]string{}
 	isIntValues := true
@@ -581,7 +644,7 @@ const (`, enum.Name, goType)
 	return goString + "\n)"
 }
 
-func generateInsertCode(set edmxEntitySet, client string, packageName string) string {
+func (g Generator) InsertCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -589,12 +652,12 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 
 	result := `func ({{type}} *{{publicName}}) Insert(headers map[string]string, link string) ({{publicName}}, error) {
 
-	{{client}} := {{packageName}}.New(link)
+	{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
 	for key, value := range headers {
-		{{client}}.AddHeader(key, value)
+		{{g.Package.OdataAlias}}.AddHeader(key, value)
 	}
 	
-	collection := New{{publicName}}Collection({{client}})
+	collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 	dataset := collection.DataSet()
 	modifiedFields := nullable.GetModifiedTags({{type}})
 	selectedFields := nullable.GetSelectedTags({{type}},false)
@@ -626,8 +689,8 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 }`
 
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	result = strings.ReplaceAll(result, "{{instance}}", instance)
 
 	runes := []rune(publicName)
@@ -638,13 +701,13 @@ func generateInsertCode(set edmxEntitySet, client string, packageName string) st
 
 }
 
-func generateMapFunctionCode(set edmxEntitySet) string {
+func (g Generator) MapFunctionCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
-	func {{publicName}}MapFunction(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]interface{}, error) {
+	func {{publicName}}MapFunction(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) (map[string]any, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
 		values.Add(SELECT, urlValues.Get(selectArgument))
@@ -665,18 +728,18 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		if urlValues.Get(ODATAEDITLINK) == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
-		model, err := {{publicName}}SelectSingle(defaultFilter, values, headers, link)
+		model, err := {{publicName}}Singular(defaultFilter, values, headers, link)
 		if err != nil {
-			return make(map[string]interface{}), err
+			return make(map[string]any), err
 		}
-		data, err := odataClient.StructToMap(model, fields)
+		data, err := {{g.Package.OdataAlias}}.StructToMap(model, fields)
 		if err != nil {
-			return make(map[string]interface{}), err
+			return make(map[string]any), err
 		}
 		return data, nil
 	}
 
-	func {{publicName}}ListMap(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) ([]map[string]interface{}, error) {
+	func {{publicName}}MultipleMap(defaultFilter string, urlValues url.Values, root string, headers map[string]string, link string) ([]map[string]any, error) {
 		values := url.Values{}
 		selectArgument := fmt.Sprintf("%sselect", root)
 		values.Add(SELECT, urlValues.Get(selectArgument))
@@ -697,22 +760,23 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		if urlValues.Get(ODATAEDITLINK) == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
-		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+		models, err := {{publicName}}Multiple(defaultFilter, values, headers, link)
 		if err != nil {
-			return make([]map[string]interface{}, 0), err
+			return make([]map[string]any, 0), err
 		}
-		data, err := odataClient.StructListToMapList(models, fields)
+		data, err := {{g.Package.OdataAlias}}.StructMultipleToMapMultiple(models, fields)
 		if err != nil {
-			return make([]map[string]interface{}, 0), err
+			return make([]map[string]any, 0), err
 		}
 		return data, nil
 	}
 	`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	return result
 }
 
-func generateSaveCode(set edmxEntitySet) string {
+func (g Generator) SaveCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -752,13 +816,17 @@ func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string)
 }
 
 func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
+
+	function := "{{publicName}}"
+
 	result := []byte{}
 	
-	data, err := StructListToMapList(alias, fields)
+	data, err := StructMultipleToMapMultiple(alias, fields)
 	if err != nil {
 		m := ErrorMessage{
-			Attempted:  "PersistentAlias.StructListToMapList",
+			Attempted:  "StructMultipleToMapMultiple",
 			Details:    fmt.Sprintf("%+v", err),
+			Function: function,
 			InnerError: err,
 			Message:    "unexpected error",
 		}
@@ -767,8 +835,9 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 	result, err = json.Marshal(data)
 	if err != nil {
 		m := ErrorMessage{
-			Attempted:  "PersistentAlias.Marshal",
+			Attempted:  "json.Marshal",
 			Details:    fmt.Sprintf("%+v", err),
+			Function:	function,
 			InnerError: err,
 			Message:    "unexpected error",
 		}
@@ -780,6 +849,8 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 
 func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 
+	function := "{{publicName}}"
+
 	selectedFields := nullable.GetSelectedTags({{type}}, false)
 	err := nullable.SetModifiedBooleanFields(reflect.ValueOf({{type}}), selectedFields, true, true)
 	if err != nil {
@@ -787,6 +858,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 			Attempted:  "SetModifiedIfSelected",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
+			Function: 	function,
 			InnerError: err,
 			Message:    "unexpected error",
 		}
@@ -798,7 +870,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 
 func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base *{{publicName}}) error {
 
-	function := "dataModel.{{publicName}}.SetModifiedIfDifferent"
+	function := "{{publicName}}.SetModifiedIfDifferent"
 
 	err := nullable.SetModifiedIfDifferent(reflect.ValueOf({{type}}), reflect.ValueOf(base))
 
@@ -823,7 +895,7 @@ func ({{type}} *{{publicName}}) GetModifiedTags() []string {
 }
 
 
-func ({{type}} *{{publicName}}) Mapped() (map[string]interface{}, error) {
+func ({{type}} *{{publicName}}) Mapped() (map[string]any, error) {
 	tags := nullable.GetSelectedTags({{type}},false)
 	return StructToMap({{type}},tags)
 }
@@ -840,7 +912,7 @@ func ({{type}} *{{publicName}}) Mapped() (map[string]interface{}, error) {
 	return result
 }
 
-func generateUpdateCode(set edmxEntitySet, client string, packageName string) string {
+func (g Generator) UpdateCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -849,12 +921,12 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	result := `// {{publicName}}.Update saves the record at the link provided the authentication provided in headers is valid.
 	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
-		{{client}} := {{packageName}}.New(link)
+		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
 		for key, value := range headers {
-			{{client}}.AddHeader(key, value)
+			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
 	
-		collection := New{{publicName}}Collection({{client}})
+		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
 
 		modifiedFields := nullable.GetModifiedTags({{type}})
@@ -887,8 +959,8 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	}`
 
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	result = strings.ReplaceAll(result, "{{instance}}", instance)
 
 	runes := []rune(publicName)
@@ -898,7 +970,116 @@ func generateUpdateCode(set edmxEntitySet, client string, packageName string) st
 	return result
 }
 
-func generateSelectCode(set edmxEntitySet, client string, packageName string) string {
+func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) string {
+
+	entityType := set.getEntityType()
+	publicName := publicAttribute(entityType.Name)
+
+	result := `
+
+	case "{{databaseName}}":
+
+		function := "saveByTableName.{{databaseName}}"
+
+		input := map[string]{{publicName}}{}
+		output :=  map[string]{{publicName}}{}
+
+		err := json.Unmarshal(dat, &list)
+		if err != nil {
+			m := ErrorMessage{
+				Attempted: "json.Unmarshal"
+				Detail: fmt.Sprintf("Error: %+v", err),
+				ErrorNo: http.StatusBadRequest,
+				Function: function,
+				Message: BAD_REQUEST
+			}
+			messages = append( messages, m )
+			return output, messages
+		}
+
+		// make sure fields are populated
+		for _, {{type}} := range input {
+			errored := false
+			{{checks}}
+			if errored {
+				continue
+			}
+			saved, err := {{type}}.Save(headers,link,values)
+			if err != nil {
+				e := ExtractError(err)
+				message := UNEXPECTED_ERROR
+				s, ok := e.Message.(string)
+				if ok {
+					message = s
+				}
+				m := ErrorMessage{
+					Attempted:     "{{type}}.Save(headers,link,values)",
+					Details:       e.Details,
+					ErrorNo:       e.ErrorNo,
+					FileName:    	e.FileName,
+					Function:      function,
+					InnerError:    err,
+					LineNumber:   e.LineNumber,
+					Message:       message,
+					Payload: nil,
+					RequestUrl: e.RequestUrl,
+				}
+				messages = append(messages, m)
+				continue
+			}
+			output = append(output,saved)
+		}
+		return output, nil
+`
+	checks := ""
+	for _, m := range g.Fields.Mandatory {
+		_, found := fields[m.Name]
+		if found {
+			if m.Valid {
+				checks += fmt.Sprintf(`if {{type}.IsValid() != {{valid}} {
+					m := ErrorMessage{
+						Detail: "{{publicName}}.%s.Valid must be {{valid}},
+						ErrorNo: http.StatusBadRequest,
+						Function: function,
+						Message: BAD_REQUEST,
+					}
+					messages = append(messages, m)
+					errored = true
+				}`, m.Name) + "\n\n"
+				checks = strings.ReplaceAll(checks, "{{valid}}", fmt.Sprintf(`%t`, m.Valid))
+			}
+			if m.Selected {
+				checks += fmt.Sprintf(`if {{type}.IsSelected() != {{selected}} {
+					m := ErrorMessage{
+						Detail: "{{publicName}}.%s.Valid must be {{selected}},
+						ErrorNo: http.StatusBadRequest,
+						Function: function,
+						Message: BAD_REQUEST,
+					}
+					messages = append(messages, m)
+					errored = true
+				}`, m.Name) + "\n\n"
+				checks = strings.ReplaceAll(checks, "{{selected}}", fmt.Sprintf(`%t`, m.Selected))
+			}
+		}
+	}
+
+	result = strings.ReplaceAll(result, "{{checks}}", checks)
+
+	runes := []rune(publicName)
+	firstLower := unicode.ToLower(runes[0])
+	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+
+	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
+	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
+	// result = strings.ReplaceAll(result, "{{options}}", options)
+
+	return result
+
+}
+
+func (g Generator) SelectCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
@@ -922,8 +1103,8 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return nil
 	}
 
-	func {{publicName}}SelectSingle(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
-		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+	func {{publicName}}Singular(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
+		models, err := {{publicName}}Multiple(defaultFilter, values, headers, link)
 		if err != nil {
 			return {{publicName}}{}, err
 		}
@@ -937,18 +1118,18 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
+	func {{publicName}}Multiple(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
 
-		{{client}} := {{packageName}}.New(link)
+		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
 		for key, value := range headers {
-			{{client}}.AddHeader(key, value)
+			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
-		options := {{client}}.ODataQueryOptions()
+		options := {{g.Package.OdataAlias}}.ODataQueryOptions()
 		options = options.ApplyArguments(defaultFilter, values)
 	
-		collection := New{{publicName}}Collection({{client}})
+		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List(options)
+		meta, data, errs := dataset.Multiple(options)
 	
 		models := []{{publicName}}{}
 		for err := range errs {
@@ -963,24 +1144,24 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return models, nil
 	}`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
-	result = strings.ReplaceAll(result, "{{packageName}}", packageName)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
+	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
 	runes := []rune(publicName)
 	firstLower := unicode.ToLower(runes[0])
 	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
 	return result
 }
 
-func generateSelectByTableName(set edmxEntitySet, client string, options string) string {
+func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
 	result := `
 
 	case "{{databaseName}}":
-		collection := New{{publicName}}Collection({{client}})
+		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List(options)
+		meta, data, errs := dataset.Multiple(options)
 		for err := range errs {
 			return nil, err
 		}
@@ -997,11 +1178,11 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 		if options.ODataReadLink == "true" {
 			fields = append(fields, "@odata.readLink")
 		}
-		result := make([]map[string]interface{}, 0)
+		result := make([]map[string]any, 0)
 		for range meta {
 			fields = RemoveEnclosingQuotes(fields)
 			for model := range data {
-				data, err := odataClient.StructToMap(model, fields)
+				data, err := {{g.Package.OdataAlias}}.StructToMap(model, fields)
 				if err != nil {
 					return result, err
 				}
@@ -1014,7 +1195,7 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 
 	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
-	result = strings.ReplaceAll(result, "{{client}}", client)
+	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	result = strings.ReplaceAll(result, "{{options}}", options)
 
 	return result
