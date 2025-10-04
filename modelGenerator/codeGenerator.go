@@ -434,7 +434,6 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 	readOnlyTag := g.Fields.ReadOnlyTag
 	readOnly := false
 	ignoreReadOnly := false
-	enforceReadOnly := false
 
 	jsonSupport := ""
 	name := ""
@@ -448,7 +447,6 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 		include := g.validPropertyName(propertyKey)
 		if include {
 
-			enforceReadOnly = false
 			ignoreReadOnly = false
 			readOnly = false
 
@@ -461,7 +459,6 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 
 				_, enforce := enforceReadOnlyProperties[propertyKey]
 				if enforce {
-					enforceReadOnly = true
 					readOnly = true
 				}
 
