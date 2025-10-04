@@ -43,9 +43,11 @@ type JsonTags struct {
 }
 
 type Generator struct {
-	ApiUrl  string  `json:"apiUrl"`
-	Package Package `json:"package"`
-	Fields  Fields  `json:"fields"`
+	ApiUrl   string  `json:"apiUrl"`
+	Fields   Fields  `json:"fields"`
+	Meta     bool    `json:"Meta"`
+	Package  Package `json:"package"`
+	ReadOnly bool    `json:"readOnly"`
 }
 
 type Mandatory struct {
@@ -134,13 +136,20 @@ func (g Generator) GenerateCode() error {
 	}
 
 	link := g.metadataUrl()
-	edmx, err := fetchEdmx(link)
+	schema, edmx, err := fetchEdmx(link)
 	if err != nil {
 		return err
 	}
 
 	packageName := filepath.Base(dirPath)
 	g.Package.Name = packageName
+
+	if g.Meta {
+		xmlPath := filepath.Join(dirPath, fmt.Sprintf(`%s.xml`, packageName))
+		fmt.Printf(`MetaXmlPath: %s`, xmlPath)
+		g.SaveXMLSchema(xmlPath, schema)
+	}
+
 	code := g.CodeFromSchema(edmx)
 	for fileName, contents := range code {
 		filePath := fmt.Sprintf("%s%s%s", dirPath, string(filepath.Separator), fileName)

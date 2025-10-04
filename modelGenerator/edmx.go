@@ -168,18 +168,6 @@ type rawEdmxDataServices struct {
 	Schemas []rawEdmxSchema `xml:"Schema"`
 }
 
-// func (ds *rawEdmxDataServices) toKeys() map[int][]string {
-// 	keys := map[int][]string{}
-// 	index := 0
-// 	for _, schema := range ds.Schemas {
-// 		for _, entityType := range schema.EntityTypes {
-// 			keys[index] = append(keys[index], entityType.Name)
-// 		}
-// 		index++
-// 	}
-// 	return keys
-// }
-
 func (ds *rawEdmxDataServices) toDataService() edmxDataServices {
 	dataService := &edmxDataServices{Schemas: map[string]edmxSchema{}}
 	for _, s := range ds.Schemas {
@@ -190,7 +178,7 @@ func (ds *rawEdmxDataServices) toDataService() edmxDataServices {
 }
 
 type edmxDataServices struct {
-	Schemas map[string]edmxSchema
+	Schemas map[string]edmxSchema `xml:"Schemas"`
 }
 
 type rawEdmxSchema struct {
@@ -254,27 +242,27 @@ type apiErrorMessage struct {
 	Message string `xml:"message"`
 }
 
-func parseEdmx(xmlData []byte) (edmxDataServices, error) {
+func parseEdmx(xmlData []byte) (edmxXmlData, edmxDataServices, error) {
 	var edmxData edmxXmlData
 	err := xml.Unmarshal(xmlData, &edmxData)
 	if err != nil {
 		var apiErr apiErrorMessage
 		err2 := xml.Unmarshal(xmlData, &apiErr)
 		if err2 == nil {
-			return edmxDataServices{}, fmt.Errorf("error from API: %s", apiErr.Message)
+			return edmxData, edmxDataServices{}, fmt.Errorf("error from API: %s", apiErr.Message)
 		}
-		return edmxDataServices{}, err
+		return edmxData, edmxDataServices{}, err
 	}
 
 	if edmxData.Version != "4.0" && edmxData.Version != "4.01" {
-		return edmxDataServices{}, fmt.Errorf("only version 4.0 and 4.01 are supported, got %s", edmxData.Version)
+		return edmxData, edmxDataServices{}, fmt.Errorf("only version 4.0 and 4.01 are supported, got %s", edmxData.Version)
 	}
 
 	if len(edmxData.DataServices) != 1 {
-		return edmxDataServices{}, fmt.Errorf("unexpected amount of <edmx:DataServices> in Edmx source, got %d and expected 1", len(edmxData.DataServices))
+		return edmxData, edmxDataServices{}, fmt.Errorf("unexpected amount of <edmx:DataServices> in Edmx source, got %d and expected 1", len(edmxData.DataServices))
 	}
 
 	dataServices := edmxData.DataServices[0]
 
-	return dataServices.toDataService(), nil
+	return edmxData, dataServices.toDataService(), nil
 }

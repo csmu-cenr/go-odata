@@ -1,7 +1,9 @@
 package modelGenerator
 
 import (
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -564,8 +566,8 @@ func (g Generator) DataSet(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
 	publicName := publicAttribute(entityType.Name)
-	result := `func {{publicName}}DataSet(headers map[string]string, link string) {{g.Package.Name}}.ODataDataSet[{{publicName}}, {{g.Package.OdataAlias}}.ODataModelDefinition[{{publicName}}]] {
-		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
+	result := `func {{publicName}}DataSet(headers map[string]string, link string) {{g.Package.OdataAlias}}.ODataDataSet[{{publicName}}, {{g.Package.OdataAlias}}.ODataModelDefinition[{{publicName}}]] {
+		{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
 			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
@@ -912,6 +914,66 @@ func ({{type}} *{{publicName}}) Mapped() (map[string]any, error) {
 	return result
 }
 
+// SaveXML writes v to path as UTF-8 XML with indentation.
+// It creates parent directories as needed and writes atomically.
+func (g Generator) SaveXMLSchema(path string, v edmxXmlData) error {
+	if path == "" {
+		return fmt.Errorf("path is empty")
+	}
+
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+
+	// Write to a temp file in the same directory for atomic rename.
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		// If anything fails before rename, clean up the temp file.
+		_ = os.Remove(tmpName)
+	}()
+
+	// XML header
+	if _, err := io.WriteString(tmp, xml.Header); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write header: %w", err)
+	}
+
+	// Encode with indentation.
+	enc := xml.NewEncoder(tmp)
+	enc.Indent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("encode xml: %w", err)
+	}
+	if err := enc.Flush(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("flush: %w", err)
+	}
+
+	// Ensure data is on disk before renaming.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("fsync: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	// Atomic replace.
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("rename: %w", err)
+	}
+
+	// Optionally, set final mode (e.g., 0644)
+	_ = os.Chmod(path, 0o644)
+	return nil
+}
+
 func (g Generator) UpdateCode(set edmxEntitySet) string {
 
 	entityType := set.getEntityType()
@@ -987,11 +1049,11 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 		err := json.Unmarshal(dat, &list)
 		if err != nil {
 			m := ErrorMessage{
-				Attempted: "json.Unmarshal"
+				Attempted: "json.Unmarshal",
 				Detail: fmt.Sprintf("Error: %+v", err),
 				ErrorNo: http.StatusBadRequest,
 				Function: function,
-				Message: BAD_REQUEST
+				Message: BAD_REQUEST,
 			}
 			messages = append( messages, m )
 			return output, messages
@@ -1035,30 +1097,31 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 	for _, m := range g.Fields.Mandatory {
 		_, found := fields[m.Name]
 		if found {
+			fieldName := snakeCaseToTitleCase(m.Name)
 			if m.Valid {
-				checks += fmt.Sprintf(`if {{type}.IsValid() != {{valid}} {
+				checks += fmt.Sprintf(`if {{type}}.IsValid() != {{valid}} {
 					m := ErrorMessage{
-						Detail: "{{publicName}}.%s.Valid must be {{valid}},
+						Detail: "{{publicName}}.%s.Valid must be {{valid}}",
 						ErrorNo: http.StatusBadRequest,
 						Function: function,
 						Message: BAD_REQUEST,
 					}
 					messages = append(messages, m)
 					errored = true
-				}`, m.Name) + "\n\n"
+				}`, fieldName) + "\n\n"
 				checks = strings.ReplaceAll(checks, "{{valid}}", fmt.Sprintf(`%t`, m.Valid))
 			}
 			if m.Selected {
-				checks += fmt.Sprintf(`if {{type}.IsSelected() != {{selected}} {
+				checks += fmt.Sprintf(`if {{type}}.IsSelected() != {{selected}} {
 					m := ErrorMessage{
-						Detail: "{{publicName}}.%s.Valid must be {{selected}},
+						Detail: "{{publicName}}.%s.Valid must be {{selected}}",
 						ErrorNo: http.StatusBadRequest,
 						Function: function,
 						Message: BAD_REQUEST,
 					}
 					messages = append(messages, m)
 					errored = true
-				}`, m.Name) + "\n\n"
+				}`, fieldName) + "\n\n"
 				checks = strings.ReplaceAll(checks, "{{selected}}", fmt.Sprintf(`%t`, m.Selected))
 			}
 		}

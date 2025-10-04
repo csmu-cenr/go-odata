@@ -336,7 +336,7 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 }
 
 // List data from the API
-func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
+func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
 	meta := make(chan Result)
 	models := make(chan ModelT)
@@ -466,9 +466,10 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 }
 
 // Single model from the API by ID using the model json tags.
-func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) Singular(id string, options ODataQueryOptions) (ModelT, error) {
 
-	functionName := `odataDataSet[ModelT, Def]) Single`
+	functionName := `odataDataSet[ModelT, Def]) Singular`
+
 	var responseModel ModelT
 
 	requestUrl := dataSet.getSingleUrl(id)
@@ -508,9 +509,9 @@ func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOpt
 }
 
 // Single model from the API using a Value tag, then model tags, by ID
-func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQueryOptions) (ModelT, error) {
+func (dataSet odataDataSet[ModelT, Def]) SingularValue(id string, options ODataQueryOptions) (ModelT, error) {
 
-	functionName := `odataDataSet[ModelT, Def]) SingleValue`
+	functionName := `odataDataSet[ModelT, Def]) SingularValue`
 
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()
