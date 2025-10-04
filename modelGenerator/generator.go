@@ -43,12 +43,13 @@ type JsonTags struct {
 }
 
 type Generator struct {
-	ApiUrl         string              `json:"apiUrl"`
-	Fields         Fields              `json:"fields"`
-	Meta           bool                `json:"Meta"`
-	Package        Package             `json:"package"`
-	ReadOnly       bool                `json:"readOnly"`
-	IgnoreReadOnly map[string][]string `json:"ignoreReadOnly"`
+	ApiUrl          string              `json:"apiUrl"`
+	Fields          Fields              `json:"fields"`
+	Meta            bool                `json:"Meta"`
+	Package         Package             `json:"package"`
+	ReadOnly        bool                `json:"readOnly"`
+	EnforceReadOnly map[string][]string `json:"enforceReadOnly"`
+	IgnoreReadOnly  map[string][]string `json:"ignoreReadOnly"`
 }
 
 type Mandatory struct {

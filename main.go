@@ -30,7 +30,7 @@ func main() {
 
 	generator, err := modelGenerator.New(config)
 	if err != nil {
-		panic(err.Error())
+		panic(fmt.Sprintf(`Error: %+v`, err))
 	}
 
 	if len(os.Args) > 2 {

@@ -410,10 +410,13 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 	structString := fmt.Sprintf("type %s struct {", publicName)
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
 
-	// FileMaker incorrectly repotts read only attributes
+	// FileMaker incorrectly reports read only attributes
+	enforceReadOnlyProperties := map[string]string{}
 	ignoreReadOnlyProperties := map[string]string{}
+
 	r := []rune(entityType.Name)
 	tableName := string(r[:len(r)-1])
+
 	ignoreTable, found := g.IgnoreReadOnly[tableName]
 	if found {
 		for _, r := range ignoreTable {
@@ -421,9 +424,17 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 		}
 	}
 
+	enforceTable, found := g.EnforceReadOnly[tableName]
+	if found {
+		for _, r := range enforceTable {
+			enforceReadOnlyProperties[r] = r
+		}
+	}
+
 	readOnlyTag := g.Fields.ReadOnlyTag
 	readOnly := false
 	ignoreReadOnly := false
+	enforceReadOnly := false
 
 	jsonSupport := ""
 	name := ""
@@ -436,12 +447,26 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 	for _, propertyKey := range propertyKeys {
 		include := g.validPropertyName(propertyKey)
 		if include {
+
+			enforceReadOnly = false
 			ignoreReadOnly = false
-			_, found := ignoreReadOnlyProperties[propertyKey]
-			if found {
-				ignoreReadOnly = true
-			}
 			readOnly = false
+
+			if g.ReadOnly {
+
+				_, ignore := ignoreReadOnlyProperties[propertyKey]
+				if ignore {
+					ignoreReadOnly = true
+				}
+
+				_, enforce := enforceReadOnlyProperties[propertyKey]
+				if enforce {
+					enforceReadOnly = true
+					readOnly = true
+				}
+
+			}
+
 			prop := entityType.Properties[propertyKey]
 			name = prop.Name
 			if g.Fields.Public {
@@ -477,7 +502,9 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 						mapped := map[string]string{}
 						for _, enum := range *annotation.EnumMember {
 							if enum == readOnlyTag && !ignoreReadOnly {
-								readOnly = true
+								if g.ReadOnly {
+									readOnly = true
+								}
 							}
 							mapped[enum] = ""
 						}
