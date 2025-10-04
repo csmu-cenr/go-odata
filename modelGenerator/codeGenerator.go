@@ -164,7 +164,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 	import (
 		"net/url"
 		"strings"
-	
+
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
 	
@@ -189,14 +189,17 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 	saveByTableName := fmt.Sprintf(`package %s
 
 	import (
+		"encoding/json"
+		"fmt"
+		"net/http"
 		"net/url"
-		"strings"
-	
+
+		nullable "github.com/Uffe-Code/go-nullable/nullable"
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
 	
 
-	func SaveByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link, data []byte) (results map[string][]map[string]any, messages []error) {
+	func SaveByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string, data []byte) (results map[string][]map[string]any, messages []error) {
 
 		client := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
@@ -204,6 +207,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		}
 		{{options}} := client.ODataQueryOptions()
 		options = {{options}}.ApplyArguments(defaultFilter, values)
+
 
 		switch tableName {
 
@@ -313,7 +317,6 @@ import (
 	default:
 		return nil, nil
 	}
-return nil, nil
 }
 `
 
@@ -407,8 +410,20 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 	structString := fmt.Sprintf("type %s struct {", publicName)
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
 
+	// FileMaker incorrectly repotts read only attributes
+	ignoreReadOnlyProperties := map[string]string{}
+	r := []rune(entityType.Name)
+	tableName := string(r[:len(r)-1])
+	ignoreTable, found := g.IgnoreReadOnly[tableName]
+	if found {
+		for _, r := range ignoreTable {
+			ignoreReadOnlyProperties[r] = r
+		}
+	}
+
 	readOnlyTag := g.Fields.ReadOnlyTag
 	readOnly := false
+	ignoreReadOnly := false
 
 	jsonSupport := ""
 	name := ""
@@ -421,6 +436,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 	for _, propertyKey := range propertyKeys {
 		include := g.validPropertyName(propertyKey)
 		if include {
+			ignoreReadOnly = false
+			_, found := ignoreReadOnlyProperties[propertyKey]
+			if found {
+				ignoreReadOnly = true
+			}
 			readOnly = false
 			prop := entityType.Properties[propertyKey]
 			name = prop.Name
@@ -456,7 +476,7 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fields map[st
 					} else {
 						mapped := map[string]string{}
 						for _, enum := range *annotation.EnumMember {
-							if enum == readOnlyTag {
+							if enum == readOnlyTag && !ignoreReadOnly {
 								readOnly = true
 							}
 							mapped[enum] = ""
@@ -588,7 +608,7 @@ func (g Generator) DeleteCode(set edmxEntitySet) string {
 
 	result := `func (o *{{publicName}}) Delete(headers map[string]string, link string) error {
 
-	{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
+	{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 	for key, value := range headers {
 		{{g.Package.OdataAlias}}.AddHeader(key, value)
 	}
@@ -654,7 +674,7 @@ func (g Generator) InsertCode(set edmxEntitySet) string {
 
 	result := `func ({{type}} *{{publicName}}) Insert(headers map[string]string, link string) ({{publicName}}, error) {
 
-	{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
+	{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 	for key, value := range headers {
 		{{g.Package.OdataAlias}}.AddHeader(key, value)
 	}
@@ -766,7 +786,7 @@ func (g Generator) MapFunctionCode(set edmxEntitySet) string {
 		if err != nil {
 			return make([]map[string]any, 0), err
 		}
-		data, err := {{g.Package.OdataAlias}}.StructMultipleToMapMultiple(models, fields)
+		data, err := StructMultipleToMapMultiple(models, fields)
 		if err != nil {
 			return make([]map[string]any, 0), err
 		}
@@ -983,7 +1003,7 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 	result := `// {{publicName}}.Update saves the record at the link provided the authentication provided in headers is valid.
 	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
-		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
+		{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
 			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
@@ -1038,26 +1058,27 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 	publicName := publicAttribute(entityType.Name)
 
 	result := `
-
 	case "{{databaseName}}":
 
 		function := "saveByTableName.{{databaseName}}"
 
 		input := map[string]{{publicName}}{}
-		output :=  map[string]{{publicName}}{}
+		output := []{{publicName}}{}
 
-		err := json.Unmarshal(dat, &list)
+		err := json.Unmarshal(data, &input)
 		if err != nil {
 			m := ErrorMessage{
 				Attempted: "json.Unmarshal",
-				Detail: fmt.Sprintf("Error: %+v", err),
+				Details: fmt.Sprintf("Error: %+v", err),
 				ErrorNo: http.StatusBadRequest,
 				Function: function,
 				Message: BAD_REQUEST,
 			}
 			messages = append( messages, m )
-			return output, messages
+			return map[string][]map[string]any{}, messages
 		}
+
+		selectFields := []string{}
 
 		// make sure fields are populated
 		for _, {{type}} := range input {
@@ -1089,9 +1110,37 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 				messages = append(messages, m)
 				continue
 			}
+			if len(selectFields) == 0 {
+				selectFields = nullable.GetSelectedTags(saved, false)
+				selectFields = append(selectFields, ExtraFields()...)
+			}
 			output = append(output,saved)
 		}
-		return output, nil
+
+		mapped, err := StructMultipleToMapMultiple(output,selectFields)
+		if err != nil {
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
+			}
+			m := ErrorMessage{
+				Attempted:     	"MultipleToMapMultiple(output)",
+				Details:       	e.Details,
+				ErrorNo:       	e.ErrorNo,
+				FileName:    	e.FileName,
+				Function:      	function,
+				InnerError:    	err,
+				LineNumber:   	e.LineNumber,
+				Message:       	message,
+				Payload: 		nil,
+				RequestUrl: 	e.RequestUrl,
+			}
+			messages = append(messages, m)
+		}
+		results := map[string][]map[string]any{"{{databaseName}}":mapped}
+		return results, messages
 `
 	checks := ""
 	for _, m := range g.Fields.Mandatory {
@@ -1099,29 +1148,29 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 		if found {
 			fieldName := snakeCaseToTitleCase(m.Name)
 			if m.Valid {
-				checks += fmt.Sprintf(`if {{type}}.IsValid() != {{valid}} {
+				checks += fmt.Sprintf(`if {{type}}.%s.IsValid() != {{valid}} {
 					m := ErrorMessage{
-						Detail: "{{publicName}}.%s.Valid must be {{valid}}",
+						Details: "{{publicName}}.%s.IsValid() must be {{valid}}",
 						ErrorNo: http.StatusBadRequest,
 						Function: function,
 						Message: BAD_REQUEST,
 					}
 					messages = append(messages, m)
 					errored = true
-				}`, fieldName) + "\n\n"
+				}`, fieldName, fieldName) + "\n\n"
 				checks = strings.ReplaceAll(checks, "{{valid}}", fmt.Sprintf(`%t`, m.Valid))
 			}
 			if m.Selected {
-				checks += fmt.Sprintf(`if {{type}}.IsSelected() != {{selected}} {
+				checks += fmt.Sprintf(`if {{type}}.%s.IsSelected() != {{selected}} {
 					m := ErrorMessage{
-						Detail: "{{publicName}}.%s.Valid must be {{selected}}",
+						Details: "{{publicName}}.%s.IsSelected() must be {{selected}}",
 						ErrorNo: http.StatusBadRequest,
 						Function: function,
 						Message: BAD_REQUEST,
 					}
 					messages = append(messages, m)
 					errored = true
-				}`, fieldName) + "\n\n"
+				}`, fieldName, fieldName) + "\n\n"
 				checks = strings.ReplaceAll(checks, "{{selected}}", fmt.Sprintf(`%t`, m.Selected))
 			}
 		}
@@ -1136,7 +1185,6 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
-	// result = strings.ReplaceAll(result, "{{options}}", options)
 
 	return result
 
@@ -1183,7 +1231,7 @@ func (g Generator) SelectCode(set edmxEntitySet) string {
 	
 	func {{publicName}}Multiple(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
 
-		{{g.Package.OdataAlias}} := {{g.Package.Name}}.New(link)
+		{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
 			{{g.Package.OdataAlias}}.AddHeader(key, value)
 		}
@@ -1222,7 +1270,7 @@ func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 	result := `
 
 	case "{{databaseName}}":
-		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
+		collection := New{{publicName}}Collection(client)
 		dataset := collection.DataSet()
 		meta, data, errs := dataset.Multiple(options)
 		for err := range errs {
