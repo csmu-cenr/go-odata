@@ -8,14 +8,17 @@ import (
 	"strings"
 )
 
-type ModelGeneratorError struct {
-	Function  string
-	Attempted string
-	Detail    interface{}
+type ErrorMessage struct {
+	Attempted string `json:"attempted" xml:"attempted"`
+	Details   any    `json:"details" xml:"details"`
+	Function  string `json:"function" xml:"function"`
 }
 
-func (e ModelGeneratorError) Error() string {
-	bytes, _ := json.Marshal(e)
+func (e ErrorMessage) Error() string {
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		return err.Error()
+	}
 	return string(bytes)
 }
 
@@ -92,19 +95,21 @@ func New(path string) (Generator, error) {
 
 	data, err := os.ReadFile(path) // just pass the file name
 	if err != nil {
-		e := ModelGeneratorError{
-			Attempted: fmt.Sprintf("Reading file: %s", path),
+		e := ErrorMessage{
+			Attempted: fmt.Sprintf(`os.ReadFile("%s")`, path),
 			Function:  function,
-			Detail:    err}
+			Details:   fmt.Sprintf(`Error: %+v`, err),
+		}
 		return generator, e
 	}
 
 	err = json.Unmarshal(data, &generator)
 	if err != nil {
-		e := ModelGeneratorError{
-			Attempted: fmt.Sprintf("Unmarshalling: %s", string(data)),
+		e := ErrorMessage{
+			Attempted: `json.Unmarshal(data, &generator)`,
 			Function:  function,
-			Detail:    err}
+			Details:   fmt.Sprintf(`Error: %+v`, err),
+		}
 		return generator, e
 	}
 

@@ -243,6 +243,7 @@ type apiErrorMessage struct {
 }
 
 func parseEdmx(xmlData []byte) (edmxXmlData, edmxDataServices, error) {
+	function := `parseEdmx`
 	var edmxData edmxXmlData
 	err := xml.Unmarshal(xmlData, &edmxData)
 	if err != nil {
@@ -251,7 +252,12 @@ func parseEdmx(xmlData []byte) (edmxXmlData, edmxDataServices, error) {
 		if err2 == nil {
 			return edmxData, edmxDataServices{}, fmt.Errorf("error from API: %s", apiErr.Message)
 		}
-		return edmxData, edmxDataServices{}, err
+		m := ErrorMessage{
+			Attempted: `xml.Unmarshal(xmlData, &edmxData)`,
+			Details:   fmt.Sprintf(`Error: %+v`, err),
+			Function:  function,
+		}
+		return edmxData, edmxDataServices{}, m
 	}
 
 	if edmxData.Version != "4.0" && edmxData.Version != "4.01" {
