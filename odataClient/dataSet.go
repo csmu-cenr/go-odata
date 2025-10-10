@@ -58,33 +58,38 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 	modelDefinition ODataModelDefinition[ModelT]
 }
 
-func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
+func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Values) ODataQueryOptions {
 
 	// Determine if the field names should be quoted
-	if values.Has(QUOTED) {
-		options.Quoted = values.Get(QUOTED) == TRUE
+	if v.Has(QUOTED) {
+		options.Quoted = v.Get(QUOTED) == TRUE
 	} else {
 		options.Quoted = true
 	}
 
-	if values.Has(ESCAPE) {
-		options.Escape = values.Get(ESCAPE) == TRUE
+	if v.Has(ESCAPE) {
+		options.Escape = v.Get(ESCAPE) == TRUE
 	} else {
 		options.Escape = false
 	}
 
 	// Quote the field names if requested
 	if options.Quoted {
-		options.Select = quoteCommaDelimited(values.Get(SELECT))
+		options.Select = quoteCommaDelimited(v.Get(SELECT))
+		orderBy := v.Get(ORDERBY)
+		if orderBy != "" {
+			options.OrderBy = quoteCommaDelimited(orderBy)
+		}
 	} else {
-		options.Select = values.Get(SELECT)
+		options.Select = v.Get(SELECT)
+		options.OrderBy = v.Get(ORDERBY)
 	}
 
 	// Quote any fields in values["quote"]
-	if values.Has(QUOTE) {
+	if v.Has(QUOTE) {
 		found := false
 		out := []string{}
-		quote := values[QUOTE]
+		quote := v[QUOTE]
 		fields := strings.Split(options.Select, COMMA)
 		for _, f := range fields {
 			if isDoubleQuoted(f) {
@@ -99,29 +104,44 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 			out = append(out, fmt.Sprintf(`"%s"`, f))
 		}
 		options.Select = strings.Join(out, COMMA)
+
+		out = []string{}
+		fields = strings.Split(options.OrderBy, COMMA)
+		for _, f := range fields {
+			if isDoubleQuoted(f) {
+				out = append(out, f)
+				continue
+			}
+			found = stringSliceContains(quote, f)
+			if !found {
+				out = append(out, f)
+				continue
+			}
+			out = append(out, fmt.Sprintf(`"%s"`, f))
+		}
+		options.OrderBy = strings.Join(out, COMMA)
 	}
 
 	// Remove quotes from fields that the odata provider rejects.
-	if values.Has(DEQUOTE) {
-		dequote := values[DEQUOTE]
+	if v.Has(DEQUOTE) {
+		dequote := v[DEQUOTE]
 		for _, v := range dequote {
 			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
 		}
 	}
 
-	options.Count = values.Get(COUNT)
-	options.Top = values.Get(TOP)
-	options.Skip = values.Get(SKIP)
-	options.OrderBy = values.Get(ORDERBY)
+	options.Count = v.Get(COUNT)
+	options.Top = v.Get(TOP)
+	options.Skip = v.Get(SKIP)
 
-	options.Expand = values.Get(EXPAND)
-	options.ODataEditLink = values.Get(ODATAEDITLINK)
-	options.ODataNavigationLink = values.Get(ODATANAVIGATIONLINK)
-	options.ODataEtag = values.Get(ODATAETAG)
-	options.ODataId = values.Get(ODATAID)
-	options.ODataReadLink = values.Get(ODATAREADLINK)
+	options.Expand = v.Get(EXPAND)
+	options.ODataEditLink = v.Get(ODATAEDITLINK)
+	options.ODataNavigationLink = v.Get(ODATANAVIGATIONLINK)
+	options.ODataEtag = v.Get(ODATAETAG)
+	options.ODataId = v.Get(ODATAID)
+	options.ODataReadLink = v.Get(ODATAREADLINK)
 
-	filterValue := values.Get(FILTER)
+	filterValue := v.Get(FILTER)
 	if defaultFilter == NOTHING && filterValue != NOTHING {
 		options.Filter = filterValue
 	}
@@ -137,13 +157,13 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 	}
 
 	// Quote the filter if options.Quoted
-	if options.Filter != NOTHING && values.Has(QUOTE) {
+	if options.Filter != NOTHING && v.Has(QUOTE) {
 		fields := []string{}
-		fields = append(fields, values[QUOTE]...)
+		fields = append(fields, v[QUOTE]...)
 		options.Filter = quoteODataFields(options.Filter, fields)
 	}
 
-	format := values.Get((FORMAT))
+	format := v.Get((FORMAT))
 	if format == NOTHING {
 		options.Format = "json"
 	} else {
