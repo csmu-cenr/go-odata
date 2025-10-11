@@ -122,13 +122,23 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Valu
 		options.OrderBy = strings.Join(out, COMMA)
 	}
 
-	// Remove quotes from fields that the odata provider rejects.
+	// region move any quoted asc or desc out of the quoted field identifier
+	if options.Quoted {
+		options.OrderBy = strings.ReplaceAll(options.OrderBy, `  `, ` `)
+		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` ,`, `,`)
+		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` asc"`, `" asc`)
+		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` desc"`, `" desc`)
+	}
+	// endregion
+
+	// region Remove quotes from fields that the odata provider rejects.
 	if v.Has(DEQUOTE) {
 		dequote := v[DEQUOTE]
 		for _, v := range dequote {
 			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
 		}
 	}
+	// endregion
 
 	options.Count = v.Get(COUNT)
 	options.Top = v.Get(TOP)
