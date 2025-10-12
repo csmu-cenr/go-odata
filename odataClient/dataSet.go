@@ -271,6 +271,15 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 	functionName := `odataDataSet[ModelT, Def]) DeleteByFilter`
 
 	requestUrl := dataSet.getCollectionUrl()
+	options.Select = ""
+	options.OrderBy = ""
+	options.Top = ""
+	options.Limit = ""
+	options.ODataEditLink = ""
+	options.ODataEtag = ""
+	options.ODataNavigationLink = ""
+	options.ODataReadLink = ""
+
 	urlArgments := options.ToQueryString()
 	if urlArgments != NOTHING {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)

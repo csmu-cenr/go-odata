@@ -43,7 +43,7 @@ starting:
 	@echo "Starting."
 	
 tags:
-	git tag -n1 | sort -r | head -n 5
+	git tag -n1 | sort -rh | head -n 5
 	
 version:
 	git tag -n1	
