@@ -70,7 +70,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Valu
 	if v.Has(ESCAPE) {
 		options.Escape = v.Get(ESCAPE) == TRUE
 	} else {
-		options.Escape = false
+		options.Escape = true
 	}
 
 	// Quote the field names if requested
@@ -121,15 +121,6 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Valu
 		}
 		options.OrderBy = strings.Join(out, COMMA)
 	}
-
-	// region move any quoted asc or desc out of the quoted field identifier
-	if options.Quoted {
-		options.OrderBy = strings.ReplaceAll(options.OrderBy, `  `, ` `)
-		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` ,`, `,`)
-		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` asc"`, `" asc`)
-		options.OrderBy = strings.ReplaceAll(options.OrderBy, ` desc"`, `" desc`)
-	}
-	// endregion
 
 	// region Remove quotes from fields that the odata provider rejects.
 	if v.Has(DEQUOTE) {
@@ -749,7 +740,12 @@ func quoteCommaDelimited(input string) string {
 	// Process each part, strip existing quotes and enclose in double quotes
 	for i, part := range parts {
 		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
-		parts[i] = fmt.Sprintf(`%s%s%s`, delimiter, part, delimiter)
+		partOrder := strings.Split(part, " ")
+		order := ``
+		if len(partOrder) > 1 {
+			order = fmt.Sprintf(` %s`, partOrder[1])
+		}
+		parts[i] = fmt.Sprintf(`%s%s%s%s`, delimiter, partOrder[0], delimiter, order)
 	}
 
 	// Join the parts back together with commas
