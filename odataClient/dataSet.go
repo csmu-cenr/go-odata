@@ -378,10 +378,11 @@ func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-
 			dataSet.getCollectionUrl(),
 			options.ToQueryString())
 		for requestUrl != NOTHING {
+			function := "odataClient.multiple: Anonymous"
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
 				newRequestError := ErrorMessage{
-					Function:   "odataClient.List: Anonymous",
+					Function:   function,
 					Attempted:  `http.NewRequest GET`,
 					RequestUrl: requestUrl,
 					Payload:    options,
@@ -396,12 +397,13 @@ func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
 				executeHttpRequestError := ErrorMessage{
-					ErrorNo:    http.StatusInternalServerError,
-					Function:   "odataClient.List: Anonymous",
 					Attempted:  "executeHttpRequest",
-					RequestUrl: requestUrl,
+					ErrorNo:    http.StatusInternalServerError,
+					Function:   function,
+					InnerError: err,
 					Options:    &options,
-					InnerError: err}
+					RequestUrl: requestUrl,
+				}
 				// get the internal error number
 				switch e := err.(type) {
 				case *ErrorMessage:
@@ -495,7 +497,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
 
-// Single model from the API by ID using the model json tags.
+// Singular model from the API by ID using the model json tags.
 func (dataSet odataDataSet[ModelT, Def]) Singular(id string, options ODataQueryOptions) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) Singular`
