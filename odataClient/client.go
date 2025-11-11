@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	netutil "github.com/Uffe-Code/go-odata/netutil"
 )
 
 type oDataClient struct {
@@ -17,17 +19,17 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
-	Message    string             `json:"message,omitempty"`
-	Code       string             `json:"code"`
-	ErrorNo    int                `json:"errorNo"`
-	Function   string             `json:"function,omitempty"`
 	Attempted  string             `json:"attempted,omitempty"`
-	Body       interface{}        `json:"body,omitempty"`
-	Details    interface{}        `json:"details,omitempty"`
+	Body       any                `json:"body,omitempty"`
+	Code       string             `json:"code"`
+	Details    any                `json:"details,omitempty"`
+	ErrorNo    int                `json:"errorNo"`
+	Exit       string             `json:"exit"`
+	Function   string             `json:"function,omitempty"`
+	InnerError any                `json:"err,omitempty"`
+	Message    string             `json:"message,omitempty"`
 	Options    *ODataQueryOptions `json:"options,omitempty"`
-	Payload    interface{}        `json:"payload"`
-	InnerError interface{}        `json:"err,omitempty"`
-	Exit       int                `json:"exit"`
+	Payload    any                `json:"payload"`
 	RequestUrl string             `json:"requestUrl,omitempty"`
 }
 
@@ -167,42 +169,76 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 
 	client.mapHeadersToRequest(req)
 	response, err := client.httpClient.Do(req)
-	var responseData T
+	var t T
 	if err != nil {
-		httpClientDoError := ErrorMessage{
-			Function:   function,
-			Attempted:  "client.httpClient.Do(req)",
-			InnerError: err,
-			RequestUrl: link,
-			ErrorNo:    response.StatusCode,
+		errorNo := http.StatusInternalServerError
+		if response != nil {
+			errorNo = response.StatusCode
 		}
-		return responseData, httpClientDoError
+		message := UNEXPECTED_ERROR
+		details := fmt.Sprintf(`%+v`, err)
+		isTimeout, description := netutil.GetTimeoutInfo(err)
+		if isTimeout {
+			details = description
+			message = GATEWAY_TIMEOUT
+			errorNo = http.StatusGatewayTimeout
+		}
+		m := ErrorMessage{
+			Attempted:  "client.httpClient.Do(req)",
+			Details:    details,
+			ErrorNo:    errorNo,
+			Exit:       "4e9df8a7b421",
+			Function:   function,
+			InnerError: err,
+			Message:    message,
+			RequestUrl: link,
+		}
+		return t, m
+	}
+	if response == nil {
+		errorNo := http.StatusInternalServerError
+		m := ErrorMessage{
+			Attempted:  "client.httpClient.Do(req)",
+			ErrorNo:    errorNo,
+			Exit:       "a4509ba97f1b",
+			Function:   function,
+			InnerError: nil,
+			Message:    UNEXPECTED_ERROR,
+			RequestUrl: link,
+		}
+		return t, m
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		message := ErrorMessage{
-			Function:   function,
 			Attempted:  "body, err := io.ReadAll(response.Body)",
+			ErrorNo:    response.StatusCode,
+			Exit:       "83cc31d60828",
+			Function:   function,
 			InnerError: err,
 			RequestUrl: link,
-			ErrorNo:    response.StatusCode}
-		return responseData, message
+		}
+		return t, message
 	}
 	if response.StatusCode >= http.StatusBadRequest {
-		m := ErrorMessage{Function: function,
+		m := ErrorMessage{
 			Attempted:  "response, err := client.httpClient.Do(req)",
+			ErrorNo:    response.StatusCode,
+			Exit:       "220bc130aa31",
+			Function:   function,
+			Message:    UNEXPECTED_ERROR,
 			RequestUrl: link,
-			ErrorNo:    response.StatusCode}
-		var data map[string]interface{}
+		}
+		var data map[string]any
 		err := json.Unmarshal(body, &data)
 		if err != nil {
 			m.Body = string(body)
-			return responseData, m
+			return t, m
 		}
 		// FileMaker Error Struct
 		if errVal, ok := data["error"]; ok {
-			if errMap, ok := errVal.(map[string]interface{}); ok {
+			if errMap, ok := errVal.(map[string]any); ok {
 				code, _ := errMap["code"].(string)
 				message, _ := errMap["message"].(string)
 				m.Code = code
@@ -210,13 +246,13 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 			}
 		}
 		m.Details = data
-		return responseData, m
+		return t, m
 	}
 	if response.StatusCode == http.StatusNoContent {
-		return responseData, nil
+		return t, nil
 	}
 
-	err = json.Unmarshal(body, &responseData)
+	err = json.Unmarshal(body, &t)
 	if err != nil {
 
 		// Might be dirty data.
@@ -230,24 +266,27 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 		zero := []byte(`": -0.`)
 		sanitised = bytes.ReplaceAll(sanitised, minus, zero)
 
-		err = json.Unmarshal(sanitised, &responseData)
+		err = json.Unmarshal(sanitised, &t)
 		if err != nil {
 			message := ErrorMessage{
 				Attempted:  "err = json.Unmarshal(sanitised, &responseData)",
 				Body:       string(sanitised),
+				Details:    fmt.Sprintf(`%+v`, err),
 				ErrorNo:    http.StatusInternalServerError,
+				Exit:       "338a01774b7c",
 				Function:   "odataClient.executeHttpRequest",
 				InnerError: err,
-				Message:    fmt.Sprintf(`%+v`, err),
+				Message:    UNEXPECTED_ERROR,
+				Payload:    string(sanitised),
 			}
-			return responseData, message
+			return t, message
 		}
 	}
 
-	return responseData, nil
+	return t, nil
 }
 
-func executeHttpRequestPayload[T interface{}](client oDataClient, req *http.Request, payload interface{}) (T, error) {
+func executeHttpRequestPayload[T any](client oDataClient, req *http.Request, payload any) (T, error) {
 
 	functionName := `executeHttpRequestPayload`
 	link := getFullURL(req)
@@ -284,7 +323,7 @@ func executeHttpRequestPayload[T interface{}](client oDataClient, req *http.Requ
 			Message:    UNEXPECTED_ERROR,
 			Payload:    payload,
 			ErrorNo:    response.StatusCode}
-		var data map[string]interface{}
+		var data map[string]any
 		err := json.Unmarshal(body, &data)
 		if err != nil {
 			message.Details = string(body)

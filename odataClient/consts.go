@@ -13,6 +13,7 @@ const (
 	EXPAND              = `$expand`
 	FILTER              = `$filter`
 	FORMAT              = `$format`
+	GATEWAY_TIMEOUT     = `gateway timeout`
 	LEFT_BRACKET        = `(`
 	NEXTLINK            = `$nextLink`
 	METADATA            = `$metadata`

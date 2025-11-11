@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+
+	netutil "github.com/Uffe-Code/go-odata/netutil"
 )
 
 const (
@@ -381,13 +383,21 @@ func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-
 			function := "odataClient.multiple: Anonymous"
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
+				isTimeout, description := netutil.GetTimeoutInfo(err)
+				details := err.Error()
+				if isTimeout {
+					details = description
+				}
 				newRequestError := ErrorMessage{
-					Function:   function,
 					Attempted:  `http.NewRequest GET`,
-					RequestUrl: requestUrl,
-					Payload:    options,
+					ErrorNo:    http.StatusInternalServerError,
+					Details:    details,
+					Function:   function,
 					InnerError: err,
-					ErrorNo:    http.StatusInternalServerError}
+					Payload:    options,
+					Message:    UNEXPECTED_ERROR,
+					RequestUrl: requestUrl,
+				}
 				errs <- newRequestError
 				close(meta)
 				close(models)
@@ -396,34 +406,37 @@ func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-
 			}
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
-				executeHttpRequestError := ErrorMessage{
+				details := err.Error()
+				m := ErrorMessage{
 					Attempted:  "executeHttpRequest",
 					ErrorNo:    http.StatusInternalServerError,
+					Details:    details,
 					Function:   function,
 					InnerError: err,
 					Options:    &options,
+					Message:    UNEXPECTED_ERROR,
 					RequestUrl: requestUrl,
 				}
 				// get the internal error number
 				switch e := err.(type) {
 				case *ErrorMessage:
-					executeHttpRequestError.Body = e.Body
-					executeHttpRequestError.Code = e.Code
-					executeHttpRequestError.Details = e.Details
-					executeHttpRequestError.ErrorNo = e.ErrorNo
-					executeHttpRequestError.Message = e.Message
-					executeHttpRequestError.RequestUrl = e.RequestUrl
+					m.Body = e.Body
+					m.Code = e.Code
+					m.Details = e.Details
+					m.ErrorNo = e.ErrorNo
+					m.Message = e.Message
+					m.RequestUrl = e.RequestUrl
 				case ErrorMessage:
-					executeHttpRequestError.Body = e.Body
-					executeHttpRequestError.Code = e.Code
-					executeHttpRequestError.Details = e.Details
-					executeHttpRequestError.ErrorNo = e.ErrorNo
-					executeHttpRequestError.Message = e.Message
-					executeHttpRequestError.RequestUrl = e.RequestUrl
+					m.Body = e.Body
+					m.Code = e.Code
+					m.Details = e.Details
+					m.ErrorNo = e.ErrorNo
+					m.Message = e.Message
+					m.RequestUrl = e.RequestUrl
 				default:
 				}
 
-				errs <- executeHttpRequestError
+				errs <- m
 				close(meta)
 				close(models)
 				close(errs)

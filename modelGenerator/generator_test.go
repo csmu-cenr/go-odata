@@ -23,17 +23,7 @@ func Test_Generate_struct(t *testing.T) {
 	LastName nullable.Nullable[string]
 	MiddleName nullable.Nullable[string]
 	UserName string
-}`, g.generateModelStruct(peopleSet.getEntityType()))
-}
-
-func Test_Generate_definition(t *testing.T) {
-	edmx, _ := getParsedEdmx()
-	peopleSet := edmx.EntitySets["People"]
-
-	assert.Equal(t, `//goland:noinspection GoUnusedExportedFunction
-func NewPersonCollection(wrapper odataClient.Wrapper) odataClient.ODataModelCollection[Person] {
-	return modelDefinition[Person]{client: wrapper.ODataClient(), name: "Person", url: "People"}
-}`, generateModelDefinition(peopleSet))
+}`, g.generateModelStruct(peopleSet.getEntityType(), map[string]string{}))
 }
 
 func Test_Generate_enum(t *testing.T) {

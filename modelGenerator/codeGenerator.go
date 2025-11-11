@@ -309,7 +309,6 @@ import (
 	default:
 		return nil, nil
 	}
-	return nil, nil
 }
 	`
 
@@ -943,7 +942,7 @@ func ({{type}} *{{publicName}}) GetModifiedTags() []string {
 
 func ({{type}} *{{publicName}}) Mapped() (map[string]any, error) {
 	tags := nullable.GetSelectedTags({{type}},false)
-	return StructToMap({{type}},tags)
+	return nullable.StructToMap({{type}},tags)
 }
 
 
@@ -1141,7 +1140,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 			output = append(output,saved)
 		}
 
-		mapped, err := StructMultipleToMapMultiple(output,selectFields)
+		mapped, err := nullable.StructMultipleToMapMultiple(output,selectFields)
 		if err != nil {
 			e := ExtractError(err)
 			message := UNEXPECTED_ERROR
@@ -1150,7 +1149,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 				message = s
 			}
 			m := ErrorMessage{
-				Attempted:     	"MultipleToMapMultiple(output)",
+				Attempted:     	"nullable.MultipleToMapMultiple(output)",
 				Details:       	e.Details,
 				ErrorNo:       	e.ErrorNo,
 				FileName:    	e.FileName,
