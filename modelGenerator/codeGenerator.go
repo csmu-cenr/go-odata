@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -43,6 +45,26 @@ func addPackageNameToExtra(packageLine string, extraPath string) (string, error)
 	return strings.Join(lines, "\n"), nil
 }
 
+// RightUUID returns the last n characters of a new UUID string.
+// If stripDashes is true, all '-' characters are removed before slicing.
+func rightUUID(n int, stripDashes bool) string {
+	u := uuid.New().String()
+
+	if stripDashes {
+		u = strings.ReplaceAll(u, "-", "")
+	}
+
+	if n <= 0 {
+		return ""
+	}
+
+	if n >= len(u) {
+		return u
+	}
+
+	return u[len(u)-n:]
+}
+
 func publicAttribute(property string) string {
 	return snakeCaseToTitleCase(property)
 }
@@ -66,8 +88,9 @@ func (g *Generator) CodeFromSchema(dataService edmxDataServices) map[string]stri
 	customErrors := `
 	
 	type NilModel struct {
-		Model  string
-		Filter string
+		Model 	string 
+		Exit  	string
+		Filter 	string
 	}
 	
 	type RecordIsOutOfDate struct {
@@ -1224,35 +1247,70 @@ func (g Generator) SelectCode(set edmxEntitySet) string {
 	// value is the desired value for {{publicName}}Selected.
 	// invert if set to true sets {{publicName}}Selected to the !value if the tag is not found in fields.
 	func({{type}} *{{publicName}})SetSelected(fields []string, value bool, not bool) error {
+		
+		function := "{{publicName}}SetSelected"
+
 		err := nullable.SetSelectedBooleanFields(reflect.ValueOf({{type}}), fields, value, not)
 		if err != nil {
 			m := ErrorMessage{
-				Attempted: "nullable.SetSelectedBooleanFields",
-				Details: fmt.Sprintf("%+v",err),
-				ErrorNo: http.StatusInternalServerError,
-				Message: "unexpected error",
+				Attempted: 	"nullable.SetSelectedBooleanFields",
+				Details: 	fmt.Sprintf("%+v",err),
+				ErrorNo: 	http.StatusInternalServerError,
+				Exit:		"{{exit01}}",
+				Function: 	function,
+				Message: 	"unexpected error",
 			}
 			return m
 		}
+
 		return nil
 	}
 
 	func {{publicName}}Singular(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
-		models, err := {{publicName}}Multiple(defaultFilter, values, headers, link)
+
+		function := "{{publicName}}Singular"
+
+		found, err := {{publicName}}Multiple(defaultFilter, values, headers, link)
+		
 		if err != nil {
-			return {{publicName}}{}, err
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
+			}
+			m := ErrorMessage{
+				Attempted:      "{{publicName}}Multiple",
+				Code:         	e.Code,
+				Details:       	e.Details,
+				ErrorNo:       	e.ErrorNo,
+				Exit:       	"{{exit02}}",
+				FileName:    	e.FileName,
+				Function:      	function,
+				InnerError:    	err,
+				LineNumber:   e.LineNumber,
+				Message:       	message,
+				Payload: 		nil,
+				RequestUrl: 	e.RequestUrl,
+				User: 		nil,
+			}
+			return {{publicName}}{}, m
 		}
-		if len(models) == 0 {
+		
+		if len(found) == 0 {
 			filter := defaultFilter
 			if values.Get(FILTER) != "" {
 				filter = fmt.Sprintf("( %s ) and ( %s )", defaultFilter, values.Get(FILTER))
 			}
-			return {{publicName}}{}, NilModel{Model: "{{publicName}}", Filter: filter}
+			return {{publicName}}{}, NilModel{Model: "{{publicName}}", Filter: filter, Exit: "{{exit03}}"}
 		}
 		return models[0], nil
 	}
 	
+	// {{publicName}}Multiple
 	func {{publicName}}Multiple(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
+
+		function := "{{publicName}}Multiple"
 
 		{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
@@ -1260,21 +1318,46 @@ func (g Generator) SelectCode(set edmxEntitySet) string {
 		}
 		options := {{g.Package.OdataAlias}}.ODataQueryOptions()
 		options = options.ApplyArguments(defaultFilter, values)
-	
+
 		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.Multiple(options)
-	
-		models := []{{publicName}}{}
-		for err := range errs {
-			return nil, err
-		}
-		for range meta {
-			for model := range data {
+
+		metaCh, dataCh, errCh := dataset.Multiple(options)
+
+		var (
+			models   []{{publicName}}{}
+			firstErr error
+		)
+
+		// Consume all channels concurrently via select.
+		for metaCh != nil || dataCh != nil || errCh != nil {
+			select {
+			case err, ok := <-errCh:
+				if !ok {
+					errCh = nil
+					continue
+				}
+				if err != nil && firstErr == nil {
+					firstErr = err
+				}
+
+			case _, ok := <-metaCh:
+				if !ok {
+					metaCh = nil
+				}
+
+			case model, ok := <-dataCh:
+				if !ok {
+					dataCh = nil
+					continue
+				}
 				models = append(models, model)
 			}
 		}
-	
+
+		if firstErr != nil {
+			return nil, firstErr
+		}
 		return models, nil
 	}`
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
@@ -1283,6 +1366,9 @@ func (g Generator) SelectCode(set edmxEntitySet) string {
 	runes := []rune(publicName)
 	firstLower := unicode.ToLower(runes[0])
 	result = strings.ReplaceAll(result, "{{type}}", string(firstLower))
+	result = strings.ReplaceAll(result, "{{exit01}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit02}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit03}}", rightUUID(12, false))
 	return result
 }
 

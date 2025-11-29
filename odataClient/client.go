@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	netutil "github.com/Uffe-Code/go-odata/netutil"
+	"github.com/Uffe-Code/go-odata/typename"
 )
 
 type oDataClient struct {
@@ -21,7 +22,7 @@ type oDataClient struct {
 type ErrorMessage struct {
 	Attempted  string             `json:"attempted,omitempty"`
 	Body       any                `json:"body,omitempty"`
-	Code       string             `json:"code"`
+	Code       string             `json:"code,omitempty"`
 	Details    any                `json:"details,omitempty"`
 	ErrorNo    int                `json:"errorNo"`
 	Exit       string             `json:"exit"`
@@ -84,6 +85,8 @@ type ODataQueryOptions struct {
 	ODataEtag           string `json:"odataEtag,omitempty"`
 	ODataId             string `json:"odataId,omitempty"`
 	ODataReadLink       string `json:"odataReadLink,omitempty"`
+
+	TimeoutSeconds float64 `json:"timeoutSeconds"`
 }
 
 func (options *ODataQueryOptions) Fields() []string {
@@ -164,7 +167,8 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 // executeHttpRequest
 func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error) {
 
-	function := `executeHttpRequest`
+	name := typename.ShortTypeName[T]()
+	function := fmt.Sprintf(`executeHttpRequest.%s`, name)
 	link := getFullURL(req)
 
 	client.mapHeadersToRequest(req)

@@ -2,6 +2,7 @@ package odataClient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,8 +10,10 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	netutil "github.com/Uffe-Code/go-odata/netutil"
+	"github.com/Uffe-Code/go-odata/typename"
 )
 
 const (
@@ -24,6 +27,7 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Singular(id string, options ODataQueryOptions) (ModelT, error)
 	SingularValue(id string, options ODataQueryOptions) (ModelT, error)
 	Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
+	//MultipleMultiResult(options ODataQueryOptions) <-chan MultiResult[ModelT]
 	Insert(model ModelT, tags []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	UpdateByFilter(model ModelT, tags []string, options ODataQueryOptions) error
@@ -32,12 +36,12 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	getSingleUrl(modelId string) string
 }
 
-type apiDeleteResponse[T interface{}] struct {
+type apiDeleteResponse[T any] struct {
 	Count *int `json:"@odata.count"`
 	Value []T  `json:"value"`
 }
 
-type apiMultiResponse[T interface{}] struct {
+type apiMultiResponse[T any] struct {
 	Value    []T    `json:"value"`
 	Count    *int   `json:"@odata.count"`
 	Universe *int   `json:"universe,omitempty"` // total size of the set
@@ -46,16 +50,21 @@ type apiMultiResponse[T interface{}] struct {
 }
 
 // apiSingleResponse
-type apiSingleResponse[T interface{}] struct {
+type apiSingleResponse[T any] struct {
 	Value T `json:"value"`
 }
 
-type apiUpdateResponse[T interface{}] struct {
+type apiUpdateResponse[T any] struct {
 	Count *int `json:"@odata.count"`
 	Value []T  `json:"value"`
 }
 
 type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
+	client          *oDataClient
+	modelDefinition ODataModelDefinition[ModelT]
+}
+
+type odataMultiDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 	client          *oDataClient
 	modelDefinition ODataModelDefinition[ModelT]
 }
@@ -367,105 +376,417 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
 }
 
-// List data from the API
+// // List data from the API
+// func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
+
+// 	name := typename.ShortTypeName[ModelT]()
+// 	function := fmt.Sprintf(`odataClient.multiple: %s`, name)
+
+// 	meta := make(chan Result, 1)
+// 	models := make(chan ModelT)
+// 	errs := make(chan error, 1)
+
+// 	go func() {
+
+// 		defer close(meta)
+// 		defer close(models)
+// 		defer close(errs)
+
+// 		requestUrl := fmt.Sprintf("%s?%s",
+// 			dataSet.getCollectionUrl(),
+// 			options.ToQueryString())
+
+// 		for requestUrl != NOTHING {
+
+// 			var req *http.Request
+// 			var err error
+// 			if options.TimeoutSeconds == 0 {
+// 				req, err = http.NewRequest("GET", requestUrl, nil)
+// 				if err != nil {
+// 					errorNo := http.StatusInternalServerError
+// 					isTimeout, description := netutil.GetTimeoutInfo(err)
+// 					details := err.Error()
+// 					if isTimeout {
+// 						details = description
+// 						errorNo = http.StatusGatewayTimeout
+// 					}
+// 					newRequestError := ErrorMessage{
+// 						Attempted:  `http.NewRequest GET`,
+// 						ErrorNo:    errorNo,
+// 						Details:    details,
+// 						Exit:       "9fd46343f4fc",
+// 						Function:   function,
+// 						InnerError: err,
+// 						Payload:    options,
+// 						Message:    UNEXPECTED_ERROR,
+// 						RequestUrl: requestUrl,
+// 					}
+// 					errs <- newRequestError
+// 					close(meta)
+// 					close(models)
+// 					close(errs)
+// 					return
+// 				}
+// 			} else {
+// 				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(options.TimeoutSeconds)*time.Second)
+// 				defer cancel()
+// 				req, err = http.NewRequestWithContext(ctx, "GET", requestUrl, nil)
+// 				if err != nil {
+// 					cancel()
+// 					errorNo := http.StatusInternalServerError
+// 					isTimeout, description := netutil.GetTimeoutInfo(err)
+// 					details := err.Error()
+// 					if isTimeout {
+// 						details = description
+// 						errorNo = http.StatusGatewayTimeout
+// 					}
+// 					newRequestError := ErrorMessage{
+// 						Attempted:  `http.NewRequest GET`,
+// 						ErrorNo:    errorNo,
+// 						Details:    details,
+// 						Exit:       "9fd46343f4fc",
+// 						Function:   function,
+// 						InnerError: err,
+// 						Payload:    options,
+// 						Message:    UNEXPECTED_ERROR,
+// 						RequestUrl: requestUrl,
+// 					}
+// 					errs <- newRequestError
+// 					return
+// 				}
+// 			}
+
+// 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
+// 			if err != nil {
+// 				details := err.Error()
+// 				errorNo := http.StatusInternalServerError
+// 				isTimeout, description := netutil.GetTimeoutInfo(err)
+// 				if isTimeout {
+// 					details = description
+// 					errorNo = http.StatusGatewayTimeout
+// 				}
+// 				m := ErrorMessage{
+// 					Attempted:  "executeHttpRequest",
+// 					Details:    details,
+// 					ErrorNo:    errorNo,
+// 					Exit:       "c245e6aa653e",
+// 					Function:   function,
+// 					InnerError: err,
+// 					Message:    UNEXPECTED_ERROR,
+// 					Options:    &options,
+// 					RequestUrl: requestUrl,
+// 				}
+// 				// get the internal error number
+// 				switch e := err.(type) {
+// 				case *ErrorMessage:
+// 					m.Body = e.Body
+// 					m.Code = e.Code
+// 					m.Details = e.Details
+// 					m.ErrorNo = e.ErrorNo
+// 					m.Message = e.Message
+// 					m.RequestUrl = e.RequestUrl
+// 					e.RequestUrl = ""
+// 				case ErrorMessage:
+// 					m.Body = e.Body
+// 					m.Code = e.Code
+// 					m.Details = e.Details
+// 					m.ErrorNo = e.ErrorNo
+// 					m.Message = e.Message
+// 					m.RequestUrl = e.RequestUrl
+// 					e.RequestUrl = ""
+// 				default:
+// 				}
+
+// 				errs <- m
+// 				return
+// 			}
+
+// 			result := Result{}
+// 			result.Context = responseData.Context
+// 			if options.Count == "true" {
+// 				result.Count = responseData.Count
+// 			}
+
+// 			result.Model = dataSet.modelDefinition.Url()
+// 			result.NextLink = responseData.NextLink
+// 			meta <- result
+
+// 			for _, model := range responseData.Value {
+// 				models <- model
+// 			}
+
+// 			if len(responseData.Value) < dataSet.client.defaultPageSize {
+// 				return
+// 			}
+
+// 			requestUrl = responseData.NextLink
+// 		}
+// 	}()
+
+// 	return meta, models, errs
+// }
+
+// newRequestError matches your old "http.NewRequest" error handling.
+func buildNewRequestError(optionsFn string, requestUrl string, options ODataQueryOptions, err error) ErrorMessage {
+	errorNo := http.StatusInternalServerError
+	details := err.Error()
+	if isTimeout, description := netutil.GetTimeoutInfo(err); isTimeout {
+		details = description
+		errorNo = http.StatusGatewayTimeout
+	}
+
+	return ErrorMessage{
+		Attempted:  "http.NewRequest GET",
+		ErrorNo:    errorNo,
+		Details:    details,
+		Exit:       "9fd46343f4fc",
+		Function:   optionsFn,
+		InnerError: err,
+		Payload:    options,
+		Message:    UNEXPECTED_ERROR,
+		RequestUrl: requestUrl,
+	}
+}
+
+// execute error handling, including unwrapping existing ErrorMessage.
+func buildExecuteError(function, requestUrl string, options ODataQueryOptions, err error) ErrorMessage {
+
+	details := err.Error()
+	errorNo := http.StatusInternalServerError
+	if isTimeout, description := netutil.GetTimeoutInfo(err); isTimeout {
+		details = description
+		errorNo = http.StatusGatewayTimeout
+	}
+
+	m := ErrorMessage{
+		Attempted:  "executeHttpRequest",
+		Details:    details,
+		ErrorNo:    errorNo,
+		Exit:       "c245e6aa653e",
+		Function:   function,
+		InnerError: err,
+		Message:    UNEXPECTED_ERROR,
+		Options:    &options,
+		RequestUrl: requestUrl,
+	}
+
+	switch e := err.(type) {
+	case *ErrorMessage:
+		m.Body = e.Body
+		m.Code = e.Code
+		m.Details = e.Details
+		m.ErrorNo = e.ErrorNo
+		m.Message = e.Message
+		m.RequestUrl = e.RequestUrl
+		e.RequestUrl = ""
+	case ErrorMessage:
+		m.Body = e.Body
+		m.Code = e.Code
+		m.Details = e.Details
+		m.ErrorNo = e.ErrorNo
+		m.Message = e.Message
+		m.RequestUrl = e.RequestUrl
+		e.RequestUrl = ""
+	default:
+	}
+
+	return m
+}
+
+// Multiple lists data from the API using paging.
+// It returns three channels:
+//
+//   - meta: 1 Result value (first page metadata), then closed
+//   - models: zero or more ModelT values, then closed
+//   - errs: 0 or 1 error, then closed
 func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
-	meta := make(chan Result)
+	name := typename.ShortTypeName[ModelT]()
+	function := fmt.Sprintf(`1odataClient.multiple.%s`, name)
+
+	meta := make(chan Result, 1) // single send, so buffer 1
 	models := make(chan ModelT)
-	errs := make(chan error)
+	errs := make(chan error, 1) // single send, so buffer 1
 
 	go func() {
+
+		defer close(meta)
+		defer close(models)
+		defer close(errs)
 
 		requestUrl := fmt.Sprintf("%s?%s",
 			dataSet.getCollectionUrl(),
 			options.ToQueryString())
+
+		if requestUrl == NOTHING {
+			return
+		}
+
+		firstPage := true
+
 		for requestUrl != NOTHING {
-			function := "odataClient.multiple: Anonymous"
-			request, err := http.NewRequest("GET", requestUrl, nil)
-			if err != nil {
-				isTimeout, description := netutil.GetTimeoutInfo(err)
-				details := err.Error()
-				if isTimeout {
-					details = description
-				}
-				newRequestError := ErrorMessage{
-					Attempted:  `http.NewRequest GET`,
-					ErrorNo:    http.StatusInternalServerError,
-					Details:    details,
-					Function:   function,
-					InnerError: err,
-					Payload:    options,
-					Message:    UNEXPECTED_ERROR,
-					RequestUrl: requestUrl,
-				}
-				errs <- newRequestError
-				close(meta)
-				close(models)
-				close(errs)
-				return
-			}
-			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
-			if err != nil {
-				details := err.Error()
-				m := ErrorMessage{
-					Attempted:  "executeHttpRequest",
-					ErrorNo:    http.StatusInternalServerError,
-					Details:    details,
-					Function:   function,
-					InnerError: err,
-					Options:    &options,
-					Message:    UNEXPECTED_ERROR,
-					RequestUrl: requestUrl,
-				}
-				// get the internal error number
-				switch e := err.(type) {
-				case *ErrorMessage:
-					m.Body = e.Body
-					m.Code = e.Code
-					m.Details = e.Details
-					m.ErrorNo = e.ErrorNo
-					m.Message = e.Message
-					m.RequestUrl = e.RequestUrl
-				case ErrorMessage:
-					m.Body = e.Body
-					m.Code = e.Code
-					m.Details = e.Details
-					m.ErrorNo = e.ErrorNo
-					m.Message = e.Message
-					m.RequestUrl = e.RequestUrl
-				default:
+			var (
+				req          *http.Request
+				err          error
+				responseData apiMultiResponse[ModelT]
+			)
+
+			// --- Build request + execute with/without timeout ---
+			if options.TimeoutSeconds == 0 {
+				req, err = http.NewRequest("GET", requestUrl, nil)
+				if err != nil {
+					errs <- buildNewRequestError(function, requestUrl, options, err)
+					return
 				}
 
-				errs <- m
-				close(meta)
-				close(models)
-				close(errs)
+				responseData, err = executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
+			} else {
+				ctx, cancel := context.WithTimeout(
+					context.Background(),
+					time.Duration(options.TimeoutSeconds)*time.Second,
+				)
+				req, err = http.NewRequestWithContext(ctx, "GET", requestUrl, nil)
+				if err != nil {
+					cancel()
+					errs <- buildNewRequestError(function, requestUrl, options, err)
+					return
+				}
+
+				responseData, err = executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
+				cancel()
+			}
+
+			if err != nil {
+				errs <- buildExecuteError(function, requestUrl, options, err)
 				return
 			}
-			close(errs) // defer(errs) was blocking.
 
-			result := Result{}
-			result.Context = responseData.Context
-			if options.Count == "true" {
-				result.Count = responseData.Count
+			// --- Send meta once, from the first page only ---
+			if firstPage {
+				result := Result{
+					Context: responseData.Context,
+				}
+				if options.Count == "true" {
+					result.Count = responseData.Count
+				}
+				result.Model = dataSet.modelDefinition.Url()
+				result.NextLink = responseData.NextLink
+
+				meta <- result
+				firstPage = false
 			}
-			result.Model = dataSet.modelDefinition.Url()
-			result.NextLink = responseData.NextLink
-			meta <- result
-			close(meta)
+
+			// --- Stream models for this page ---
 			for _, model := range responseData.Value {
 				models <- model
 			}
 
-			defer close(models)
-			if len(responseData.Value) < dataSet.client.defaultPageSize {
+			// If fewer than full page, or no next link, we're done.
+			if len(responseData.Value) < dataSet.client.defaultPageSize || responseData.NextLink == "" {
 				return
 			}
+
 			requestUrl = responseData.NextLink
 		}
 	}()
 
 	return meta, models, errs
+}
+
+type MultiResult[T any] struct {
+	Meta  *Result // set once, on the first item (if any)
+	Model *T      // set for each data row
+	Err   error   // set once on error, stream then ends
+}
+
+func (dataSet odataDataSet[ModelT, Def]) MultipleResult(options ODataQueryOptions) <-chan MultiResult[ModelT] {
+	name := typename.ShortTypeName[ModelT]()
+	function := fmt.Sprintf("odataClient.multiple.%s", name)
+
+	out := make(chan MultiResult[ModelT]) // add buffer if you want
+
+	go func() {
+		defer close(out)
+
+		requestUrl := fmt.Sprintf("%s?%s",
+			dataSet.getCollectionUrl(),
+			options.ToQueryString())
+
+		if requestUrl == NOTHING {
+			return
+		}
+
+		firstPage := true
+
+		for requestUrl != NOTHING {
+			var (
+				req          *http.Request
+				err          error
+				responseData apiMultiResponse[ModelT]
+			)
+
+			// --- Build request + execute with/without timeout ---
+			if options.TimeoutSeconds == 0 {
+				req, err = http.NewRequest("GET", requestUrl, nil)
+				if err != nil {
+					out <- MultiResult[ModelT]{Err: buildNewRequestError(function, requestUrl, options, err)}
+					return
+				}
+
+				responseData, err = executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
+			} else {
+				ctx, cancel := context.WithTimeout(
+					context.Background(),
+					time.Duration(options.TimeoutSeconds)*time.Second,
+				)
+				req, err = http.NewRequestWithContext(ctx, "GET", requestUrl, nil)
+				if err != nil {
+					cancel()
+					out <- MultiResult[ModelT]{Err: buildNewRequestError(function, requestUrl, options, err)}
+					return
+				}
+
+				responseData, err = executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
+				cancel()
+			}
+
+			if err != nil {
+				out <- MultiResult[ModelT]{Err: buildExecuteError(function, requestUrl, options, err)}
+				return
+			}
+
+			// --- Send meta once, from the first page only ---
+			if firstPage {
+				r := Result{
+					Context:  responseData.Context,
+					Model:    dataSet.modelDefinition.Url(),
+					NextLink: responseData.NextLink,
+				}
+				if options.Count == "true" {
+					r.Count = responseData.Count
+				}
+
+				out <- MultiResult[ModelT]{Meta: &r}
+				firstPage = false
+			}
+
+			// --- Stream models for this page ---
+			for i := range responseData.Value {
+				// copy to avoid pointer-to-loop-var bug
+				model := responseData.Value[i]
+				out <- MultiResult[ModelT]{Model: &model}
+			}
+
+			// --- Pagination termination ---
+			if len(responseData.Value) < dataSet.client.defaultPageSize || responseData.NextLink == "" {
+				return
+			}
+
+			requestUrl = responseData.NextLink
+		}
+	}()
+
+	return out
 }
 
 // Insert a model to the API
@@ -657,7 +978,7 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 		return message
 	}
 	if options.Quoted {
-		quoted := map[string]interface{}{}
+		quoted := map[string]any{}
 		for k, v := range modelMap {
 			quoted[fmt.Sprintf(`"%s"`, k)] = v
 		}
@@ -852,13 +1173,13 @@ func stringSliceContains(slice []string, item string) bool {
 }
 
 // StructListToInterface converts a list of structs to an interface
-func StructListToInterface(data interface{}, fields []string) (interface{}, error) {
+func StructListToInterface(data any, fields []string) (any, error) {
 	return StructListToMapList(data, fields)
 }
 
 // StructListToMapList converts a list of structs to a list of maps with selected fields.
-func StructListToMapList(data interface{}, fields []string) ([]map[string]interface{}, error) {
-	var result []map[string]interface{}
+func StructListToMapList(data any, fields []string) ([]map[string]any, error) {
+	var result []map[string]any
 
 	// Get the type and value of the input data
 	dataType := reflect.TypeOf(data)
@@ -886,7 +1207,7 @@ func StructListToMapList(data interface{}, fields []string) ([]map[string]interf
 	return result, nil
 }
 
-func StructToAny(data interface{}, fields []string) (interface{}, error) {
+func StructToAny(data any, fields []string) (any, error) {
 	result, err := StructToMap(data, fields)
 	if err != nil {
 		return nil, err
@@ -894,8 +1215,8 @@ func StructToAny(data interface{}, fields []string) (interface{}, error) {
 	return result, nil
 }
 
-func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+func StructToMap(data any, fields []string) (map[string]any, error) {
+	result := make(map[string]any)
 
 	// Get the type and value of the input data
 	dataType := reflect.TypeOf(data)
