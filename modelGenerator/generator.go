@@ -53,6 +53,32 @@ type Generator struct {
 	ReadOnly        bool                `json:"readOnly"`
 	EnforceReadOnly map[string][]string `json:"enforceReadOnly"`
 	IgnoreReadOnly  map[string][]string `json:"ignoreReadOnly"`
+	Sets            []Set               `json:"sets"`
+	Verbose         bool                `json:"verbose"`
+	Debug           map[string]Debug    `json:"debug"`
+	DebugFunction   *DebugFunction
+}
+
+type Debug struct {
+	Functions map[string]DebugFunction `json:"functions"`
+	Verbose   bool                     `json:"verbose"`
+}
+
+type DebugFunction struct {
+	Variable string     `json:"variable"`
+	Ignore   bool       `json:"ignore"`
+	Fields   DebugField `json:"fields"`
+	Result   bool       `json:"result"`
+}
+
+type DebugField struct {
+	All   bool     `json:"all"`
+	Named []string `json:"named"`
+}
+
+type Set struct {
+	Name   string `json:"name"`
+	Ignore bool   `json:"ignore"`
 }
 
 type Mandatory struct {
@@ -153,7 +179,7 @@ func (g Generator) GenerateCode() error {
 
 	if g.Meta {
 		xmlPath := filepath.Join(dirPath, fmt.Sprintf(`%s.xml`, packageName))
-		fmt.Printf(`MetaXmlPath: %s`, xmlPath)
+		fmt.Printf("\n\nMetaXmlPath: %s\n\n", xmlPath)
 		g.SaveXMLSchema(xmlPath, schema)
 	}
 

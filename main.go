@@ -75,5 +75,5 @@ func main() {
 		return
 	}
 
-	fmt.Printf("\nCode generated successfully\n")
+	fmt.Printf("\nCode generated successfully\n\n")
 }

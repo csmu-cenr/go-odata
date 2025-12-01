@@ -24,9 +24,9 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Get(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
-	Singular(id string, options ODataQueryOptions) (ModelT, error)
-	SingularValue(id string, options ODataQueryOptions) (ModelT, error)
-	Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
+	Node(idOrEditLink string, options ODataQueryOptions) (ModelT, error)
+	//SingularValue(id string, options ODataQueryOptions) (ModelT, error)
+	Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	//MultipleMultiResult(options ODataQueryOptions) <-chan MultiResult[ModelT]
 	Insert(model ModelT, tags []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
@@ -376,156 +376,6 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
 }
 
-// // List data from the API
-// func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
-
-// 	name := typename.ShortTypeName[ModelT]()
-// 	function := fmt.Sprintf(`odataClient.multiple: %s`, name)
-
-// 	meta := make(chan Result, 1)
-// 	models := make(chan ModelT)
-// 	errs := make(chan error, 1)
-
-// 	go func() {
-
-// 		defer close(meta)
-// 		defer close(models)
-// 		defer close(errs)
-
-// 		requestUrl := fmt.Sprintf("%s?%s",
-// 			dataSet.getCollectionUrl(),
-// 			options.ToQueryString())
-
-// 		for requestUrl != NOTHING {
-
-// 			var req *http.Request
-// 			var err error
-// 			if options.TimeoutSeconds == 0 {
-// 				req, err = http.NewRequest("GET", requestUrl, nil)
-// 				if err != nil {
-// 					errorNo := http.StatusInternalServerError
-// 					isTimeout, description := netutil.GetTimeoutInfo(err)
-// 					details := err.Error()
-// 					if isTimeout {
-// 						details = description
-// 						errorNo = http.StatusGatewayTimeout
-// 					}
-// 					newRequestError := ErrorMessage{
-// 						Attempted:  `http.NewRequest GET`,
-// 						ErrorNo:    errorNo,
-// 						Details:    details,
-// 						Exit:       "9fd46343f4fc",
-// 						Function:   function,
-// 						InnerError: err,
-// 						Payload:    options,
-// 						Message:    UNEXPECTED_ERROR,
-// 						RequestUrl: requestUrl,
-// 					}
-// 					errs <- newRequestError
-// 					close(meta)
-// 					close(models)
-// 					close(errs)
-// 					return
-// 				}
-// 			} else {
-// 				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(options.TimeoutSeconds)*time.Second)
-// 				defer cancel()
-// 				req, err = http.NewRequestWithContext(ctx, "GET", requestUrl, nil)
-// 				if err != nil {
-// 					cancel()
-// 					errorNo := http.StatusInternalServerError
-// 					isTimeout, description := netutil.GetTimeoutInfo(err)
-// 					details := err.Error()
-// 					if isTimeout {
-// 						details = description
-// 						errorNo = http.StatusGatewayTimeout
-// 					}
-// 					newRequestError := ErrorMessage{
-// 						Attempted:  `http.NewRequest GET`,
-// 						ErrorNo:    errorNo,
-// 						Details:    details,
-// 						Exit:       "9fd46343f4fc",
-// 						Function:   function,
-// 						InnerError: err,
-// 						Payload:    options,
-// 						Message:    UNEXPECTED_ERROR,
-// 						RequestUrl: requestUrl,
-// 					}
-// 					errs <- newRequestError
-// 					return
-// 				}
-// 			}
-
-// 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, req)
-// 			if err != nil {
-// 				details := err.Error()
-// 				errorNo := http.StatusInternalServerError
-// 				isTimeout, description := netutil.GetTimeoutInfo(err)
-// 				if isTimeout {
-// 					details = description
-// 					errorNo = http.StatusGatewayTimeout
-// 				}
-// 				m := ErrorMessage{
-// 					Attempted:  "executeHttpRequest",
-// 					Details:    details,
-// 					ErrorNo:    errorNo,
-// 					Exit:       "c245e6aa653e",
-// 					Function:   function,
-// 					InnerError: err,
-// 					Message:    UNEXPECTED_ERROR,
-// 					Options:    &options,
-// 					RequestUrl: requestUrl,
-// 				}
-// 				// get the internal error number
-// 				switch e := err.(type) {
-// 				case *ErrorMessage:
-// 					m.Body = e.Body
-// 					m.Code = e.Code
-// 					m.Details = e.Details
-// 					m.ErrorNo = e.ErrorNo
-// 					m.Message = e.Message
-// 					m.RequestUrl = e.RequestUrl
-// 					e.RequestUrl = ""
-// 				case ErrorMessage:
-// 					m.Body = e.Body
-// 					m.Code = e.Code
-// 					m.Details = e.Details
-// 					m.ErrorNo = e.ErrorNo
-// 					m.Message = e.Message
-// 					m.RequestUrl = e.RequestUrl
-// 					e.RequestUrl = ""
-// 				default:
-// 				}
-
-// 				errs <- m
-// 				return
-// 			}
-
-// 			result := Result{}
-// 			result.Context = responseData.Context
-// 			if options.Count == "true" {
-// 				result.Count = responseData.Count
-// 			}
-
-// 			result.Model = dataSet.modelDefinition.Url()
-// 			result.NextLink = responseData.NextLink
-// 			meta <- result
-
-// 			for _, model := range responseData.Value {
-// 				models <- model
-// 			}
-
-// 			if len(responseData.Value) < dataSet.client.defaultPageSize {
-// 				return
-// 			}
-
-// 			requestUrl = responseData.NextLink
-// 		}
-// 	}()
-
-// 	return meta, models, errs
-// }
-
 // newRequestError matches your old "http.NewRequest" error handling.
 func buildNewRequestError(optionsFn string, requestUrl string, options ODataQueryOptions, err error) ErrorMessage {
 	errorNo := http.StatusInternalServerError
@@ -593,13 +443,13 @@ func buildExecuteError(function, requestUrl string, options ODataQueryOptions, e
 	return m
 }
 
-// Multiple lists data from the API using paging.
+// Set lists data from the API using paging.
 // It returns three channels:
 //
 //   - meta: 1 Result value (first page metadata), then closed
 //   - models: zero or more ModelT values, then closed
 //   - errs: 0 or 1 error, then closed
-func (dataSet odataDataSet[ModelT, Def]) Multiple(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
+func (dataSet odataDataSet[ModelT, Def]) Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
 	name := typename.ShortTypeName[ModelT]()
 	function := fmt.Sprintf(`1odataClient.multiple.%s`, name)
@@ -832,50 +682,50 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 }
 
 // Singular model from the API by ID using the model json tags.
-func (dataSet odataDataSet[ModelT, Def]) Singular(id string, options ODataQueryOptions) (ModelT, error) {
+// func (dataSet odataDataSet[ModelT, Def]) NodeJSON(id string, options ODataQueryOptions) (ModelT, error) {
 
-	functionName := `odataDataSet[ModelT, Def]) Singular`
+// 	functionName := `odataDataSet[ModelT, Def]) Singular`
 
-	var responseModel ModelT
+// 	var responseModel ModelT
 
-	requestUrl := dataSet.getSingleUrl(id)
-	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
-		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
-	}
-	request, err := http.NewRequest("GET", requestUrl, nil)
+// 	requestUrl := dataSet.getSingleUrl(id)
+// 	urlArgments := options.ToQueryString()
+// 	if urlArgments != NOTHING {
+// 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
+// 	}
+// 	request, err := http.NewRequest("GET", requestUrl, nil)
 
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-			Message:    UNEXPECTED_ERROR,
-			Function:   functionName,
-			RequestUrl: requestUrl,
-			Options:    &options,
-			Details:    fmt.Sprintf(`%+v`, err)}
-		return responseModel, message
-	}
-	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
-	if err != nil {
-		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
-			Function:   functionName,
-			RequestUrl: requestUrl,
-			Options:    &options,
-			InnerError: err}
-		switch e := err.(type) {
-		case *ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		case ErrorMessage:
-			message.ErrorNo = e.ErrorNo
-		default:
-		}
-		return responseModel, message
-	}
+// 	if err != nil {
+// 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
+// 			Message:    UNEXPECTED_ERROR,
+// 			Function:   functionName,
+// 			RequestUrl: requestUrl,
+// 			Options:    &options,
+// 			Details:    fmt.Sprintf(`%+v`, err)}
+// 		return responseModel, message
+// 	}
+// 	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
+// 	if err != nil {
+// 		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
+// 			Function:   functionName,
+// 			RequestUrl: requestUrl,
+// 			Options:    &options,
+// 			InnerError: err}
+// 		switch e := err.(type) {
+// 		case *ErrorMessage:
+// 			message.ErrorNo = e.ErrorNo
+// 		case ErrorMessage:
+// 			message.ErrorNo = e.ErrorNo
+// 		default:
+// 		}
+// 		return responseModel, message
+// 	}
 
-	return responseData, nil
-}
+// 	return responseData, nil
+// }
 
-// Single model from the API using a Value tag, then model tags, by ID
-func (dataSet odataDataSet[ModelT, Def]) SingularValue(id string, options ODataQueryOptions) (ModelT, error) {
+// Node model from the API using a Value tag, then model tags, by ID
+func (dataSet odataDataSet[ModelT, Def]) Node(id string, options ODataQueryOptions) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) SingularValue`
 
