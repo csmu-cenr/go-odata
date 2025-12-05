@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	netutil "github.com/Uffe-Code/go-odata/netutil"
 	"github.com/Uffe-Code/go-odata/typename"
@@ -20,18 +21,19 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
-	Attempted  string             `json:"attempted,omitempty"`
-	Body       any                `json:"body,omitempty"`
-	Code       string             `json:"code,omitempty"`
-	Details    any                `json:"details,omitempty"`
-	ErrorNo    int                `json:"errorNo"`
-	Exit       string             `json:"exit"`
-	Function   string             `json:"function,omitempty"`
-	InnerError any                `json:"err,omitempty"`
-	Message    string             `json:"message,omitempty"`
-	Options    *ODataQueryOptions `json:"options,omitempty"`
-	Payload    any                `json:"payload"`
-	RequestUrl string             `json:"requestUrl,omitempty"`
+	Attempted     string             `json:"attempted,omitempty"`
+	Body          any                `json:"body,omitempty"`
+	Code          string             `json:"code,omitempty"`
+	Details       any                `json:"details,omitempty"`
+	ErrorNo       int                `json:"errorNo"`
+	Exit          string             `json:"exit"`
+	Function      string             `json:"function,omitempty"`
+	InnerError    any                `json:"err,omitempty"`
+	Message       string             `json:"message,omitempty"`
+	Options       *ODataQueryOptions `json:"options,omitempty"`
+	Payload       any                `json:"payload"`
+	RequestUrl    string             `json:"requestUrl,omitempty"`
+	UnixTimestamp int64              `json:"unixTimestamp"`
 }
 
 func (e ErrorMessage) Error() string {
@@ -227,12 +229,13 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 	}
 	if response.StatusCode >= http.StatusBadRequest {
 		m := ErrorMessage{
-			Attempted:  "response, err := client.httpClient.Do(req)",
-			ErrorNo:    response.StatusCode,
-			Exit:       "220bc130aa31",
-			Function:   function,
-			Message:    UNEXPECTED_ERROR,
-			RequestUrl: link,
+			Attempted:     "response, err := client.httpClient.Do(req)",
+			ErrorNo:       response.StatusCode,
+			Exit:          "220bc130aa31",
+			Function:      function,
+			Message:       UNEXPECTED_ERROR,
+			RequestUrl:    link,
+			UnixTimestamp: time.Now().Unix(),
 		}
 		var data map[string]any
 		err := json.Unmarshal(body, &data)
@@ -273,21 +276,99 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 		err = json.Unmarshal(sanitised, &t)
 		if err != nil {
 			message := ErrorMessage{
-				Attempted:  "err = json.Unmarshal(sanitised, &responseData)",
-				Body:       string(sanitised),
-				Details:    fmt.Sprintf(`%+v`, err),
-				ErrorNo:    http.StatusInternalServerError,
-				Exit:       "338a01774b7c",
-				Function:   "odataClient.executeHttpRequest",
-				InnerError: err,
-				Message:    UNEXPECTED_ERROR,
-				Payload:    string(sanitised),
+				Attempted:     "err = json.Unmarshal(sanitised, &responseData)",
+				Body:          string(sanitised),
+				Details:       fmt.Sprintf(`%+v`, err),
+				ErrorNo:       http.StatusInternalServerError,
+				Exit:          "338a01774b7c",
+				Function:      "odataClient.executeHttpRequest",
+				InnerError:    err,
+				Message:       UNEXPECTED_ERROR,
+				Payload:       string(sanitised),
+				UnixTimestamp: time.Now().Unix(),
 			}
 			return t, message
 		}
 	}
 
+	// if reflect.ValueOf(t).IsZero() {
+
+	// 	mapped := map[string]any{}
+	// 	err := json.Unmarshal(body, &mapped)
+	// 	if err != nil {
+	// 		message := UNEXPECTED_ERROR
+	// 		m := ErrorMessage{
+	// 			Attempted:  "json.Unmarshal",
+	// 			Details:    fmt.Sprintf(`error: %+s`, err),
+	// 			ErrorNo:    http.StatusInternalServerError,
+	// 			Exit:       "2125d2eb6ed4",
+	// 			Function:   function,
+	// 			InnerError: err,
+	// 			Message:    message,
+	// 			Payload:    string(body),
+	// 			RequestUrl: link,
+	// 		}
+	// 		return t, m
+	// 	}
+
+	// 	err = json.Unmarshal(body, &t)
+	// 	if err != nil {
+	// 		message := UNEXPECTED_ERROR
+	// 		m := ErrorMessage{
+	// 			Attempted:  "json.Unmarshal",
+	// 			Details:    fmt.Sprintf(`error: %+s`, err),
+	// 			ErrorNo:    http.StatusInternalServerError,
+	// 			Exit:       "889da2a39a61",
+	// 			Function:   function,
+	// 			InnerError: err,
+	// 			Message:    message,
+	// 			Payload:    nil,
+	// 			RequestUrl: link,
+	// 		}
+	// 		return t, m
+	// 	}
+
+	// }
+
 	return t, nil
+}
+
+func MapTo[T any](m map[string]any) (T, error) {
+	var out T
+	b, err := json.Marshal(m)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (r *apiSingleResponse[T]) UnmarshalJSON(b []byte) error {
+	var v T
+	if err := json.Unmarshal(b, &v); err == nil {
+		r.Value = v
+		return nil
+	}
+
+	// Fallback: try as a map, maybe adjust, then re-marshal into T.
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		// nothing we can do
+		return err
+	}
+
+	// You can tweak m here if needed (strip @odata.*, etc.)
+
+	// Convert map back to T via JSON
+	converted, err := MapTo[T](m)
+	if err != nil {
+		return err
+	}
+
+	r.Value = converted
+	return nil
 }
 
 func executeHttpRequestPayload[T any](client oDataClient, req *http.Request, payload any) (T, error) {

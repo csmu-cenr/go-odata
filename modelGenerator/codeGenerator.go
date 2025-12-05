@@ -936,7 +936,7 @@ func (g Generator) SaveCode(set edmxEntitySet, fieldsMap map[string]string) stri
 	if found {
 		guardValid = "{{type}}.Uuid.IsValid()"
 		guardValue = "guardValue := {{type}}.Uuid.GetData()"
-		guardFilter = "guardFilter := fmt.Sprintf(\" uuid eq '%s`\", guardValue)"
+		guardFilter = "guardFilter := fmt.Sprintf(\" uuid eq '%s' \", guardValue)"
 	} else {
 		_, found := fieldsMap["id"]
 		if found {
@@ -1090,7 +1090,31 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 	if len(existing) > 0 {
 		// will only be one
 		for _, e := range existing {
-			{{type}}.ODataEditLink = e.ODataEditLink
+			if {{type}}.ODataEditLink == "" {
+				{{type}}.ODataEditLink = e.ODataEditLink
+			}
+			if {{type}}.ODataEditLink != e.ODataEditLink {
+				message := UNEXPECTED_ERROR
+					m := ErrorMessage{
+						Attempted:  "",
+						Details:    	"{{type}}.ODataEditLink != e.ODataEditLink",
+						ErrorNo:    	http.StatusInternalServerError,
+						Exit:       	"{{exit04}}",
+						FileName:   	"",
+						Function:   	function,
+						InnerError: 	err,
+						IPAddress:  	"",
+						LineNumber: 	0,
+						Link:       	"",
+						Message:    	message,
+						Payload:    	nil,
+						RequestUrl: 	"",
+						User:       	nil,
+						UnixTimestamp: 	time.Now().Unix(),
+					}
+					return dereferenced, m
+				}
+			}
 			different, err := nullable.LeftIsDifferentFromRightIgnoring(reflect.ValueOf({{type}}), reflect.ValueOf(e), consider, icm)
 			if err != nil {
 				ee := ExtractError(err)
@@ -1103,7 +1127,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 					Attempted:  "nullable.LeftIsDifferentFromRight",
 					Details:    ee.Details,
 					ErrorNo:    ee.ErrorNo,
-					Exit:       "{{exit04}}",
+					Exit:       "{{exit05}}",
 					FileName:   ee.FileName,
 					Function:   function,
 					InnerError: err,
@@ -1123,6 +1147,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 				cm = append(cm, consider...)
 				cm = append(cm, modification...)
 				modify, err := nullable.LeftIsDifferentFromRightIgnoring(reflect.ValueOf({{type}}), reflect.ValueOf(e), cm, di)
+				values.Set(MODIFIED, strings.Join(modify, COMMA))
 				if err != nil {
 					ee := ExtractError(err)
 					message := UNEXPECTED_ERROR
@@ -1135,7 +1160,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 						Code:       ee.Code,
 						Details:    ee.Details,
 						ErrorNo:    ee.ErrorNo,
-						Exit:       "{{exit05}}",
+						Exit:       "{{exit06}}",
 						FileName:   ee.FileName,
 						Function:   function,
 						InnerError: err,
@@ -1161,7 +1186,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 						Attempted:  "nullable.SetLeftModified",
 						Details:    ee.Details,
 						ErrorNo:    ee.ErrorNo,
-						Exit:       "{{exit06}}",
+						Exit:       "{{exit07}}",
 						FileName:   ee.FileName,
 						Function:   function,
 						InnerError: err,
@@ -1226,7 +1251,7 @@ func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string)
 				Code:         	ee.Code,
 				Details:       	ee.Details,
 				ErrorNo:       	ee.ErrorNo,
-				Exit:       	"{{exit07}}",
+				Exit:       	"{{exit08}}",
 				FileName:    	ee.FileName,
 				Function:      	function,
 				InnerError:    	err,
@@ -1248,7 +1273,7 @@ func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string)
 			Attempted:     	"",
 			Details:       	"",
 			ErrorNo:       	http.StatusInternalServerError,
-			Exit:       	"{{exit08}}",
+			Exit:       	"{{exit09}}",
 			FileName:    	"",
 			Function:      	function,
 			InnerError:    	errs,
@@ -1277,7 +1302,7 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 			Attempted:  "StructSetToMapSet",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:	http.StatusInternalServerError,
-			Exit:		"{{exit09}}",
+			Exit:		"{{exit10}}",
 			Function: 	function,
 			InnerError: err,
 			Message:    "unexpected error",
@@ -1290,7 +1315,7 @@ func (alias {{publicName}}Alias) Marshal(fields []string) ([]byte, error) {
 			Attempted:  "json.Marshal",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:	http.StatusInternalServerError,
-			Exit:		"{{exit10}}",
+			Exit:		"{{exit11}}",
 			Function:	function,
 			InnerError: err,
 			Message:    "unexpected error",
@@ -1312,7 +1337,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfSelected() error {
 			Attempted:  "SetModifiedIfSelected",
 			Details:    fmt.Sprintf("%+v", err),
 			ErrorNo:    http.StatusInternalServerError,
-			Exit:		"{{exit11}}",
+			Exit:		"{{exit12}}",
 			Function: 	function,
 			InnerError: err,
 			Message:    "unexpected error",
@@ -1335,7 +1360,7 @@ func ({{type}} *{{publicName}}) SetModifiedIfDifferent(base *{{publicName}}) err
 			Attempted:  "SetModifiedIfDifferent",
 			Details:    e.Details,
 			ErrorNo:    e.ErrorNo,
-			Exit:		"{{exit12}}",
+			Exit:		"{{exit13}}",
 			InnerError: err,
 			Function:   function,
 			Message:    "unexpected error",
@@ -1367,7 +1392,7 @@ func ({{type}} *{{publicName}}) Mapped() (result map[string]any, err error) {
 			Attempted:     	"nullable.StructToMap",
 			Details:       	fmt.Sprintf("error: %+s",err),
 			ErrorNo:       	http.StatusInternalServerError,
-			Exit:       	"{{exit13}}",
+			Exit:       	"{{exit14}}",
 			Function:      	function,
 			InnerError:    	err,
 			Message:       	message,
@@ -1399,6 +1424,7 @@ func ({{type}} *{{publicName}}) Mapped() (result map[string]any, err error) {
 	result = strings.ReplaceAll(result, "{{exit12}}", rightUUID(12, false))
 
 	result = strings.ReplaceAll(result, "{{exit13}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit14}}", rightUUID(12, false))
 
 	result = strings.ReplaceAll(result, "{{guardValid}}", guardValid)
 	result = strings.ReplaceAll(result, "{{guardValue}}", guardValue)
@@ -1492,18 +1518,36 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 		collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 		dataset := collection.DataSet()
 
-		modifiedFields := nullable.GetModifiedTags({{type}})
-		values.Set(SELECT, strings.Join(modifiedFields, COMMA))
+		modify := values.Get(MODIFIED)
+		if modify == "" {
+			modifiedFields := nullable.GetModifiedTags(r)
+			modify = strings.Join(modifiedFields, COMMA)
+		}
+		values.Set(SELECT, modify)
 		selectedFields := nullable.GetSelectedTags({{type}},false)
 
 		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, values)
 		if err != nil {
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
+			}
 			m := ErrorMessage{
-				Attempted:  "{{instance}}.Update",
-				Details:    fmt.Sprintf("%+v", err),
-				ErrorNo:    http.StatusInternalServerError,
+				Attempted:  "dataset.Update({{type}}.ODataEditLink, *{{type}}, values)",
+				Code:       e.Code,
+				Details:    e.Details,
+				ErrorNo:    e.ErrorNo,
+				Exit:       "{{exit01}}",
+				FileName:   e.FileName,
+				Function:   function,
 				InnerError: err,
-				Message:    "unexpected error",
+				LineNumber: e.LineNumber,
+				Message:    message,
+				Payload:    nil,
+				RequestUrl: e.RequestUrl,
+				User:       nil,
 			}
 			return result, m
 		}
@@ -1513,6 +1557,7 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 				Attempted:  SET_NULLABLE_BOOLEAN_FIELDS,
 				Details:    fmt.Sprintf("%+v", err),
 				ErrorNo:    http.StatusInternalServerError,
+				Exit:		"{{exit02}}",
 				InnerError: err,
 				Message:    "unexpected error",
 			}
@@ -1525,6 +1570,8 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 	result = strings.ReplaceAll(result, "{{g.Package.Name}}", g.Package.Name)
 	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	result = strings.ReplaceAll(result, "{{instance}}", instance)
+	result = strings.ReplaceAll(result, "{{exit01}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit02}}", rightUUID(12, false))
 
 	runes := []rune(publicName)
 	firstLower := unicode.ToLower(runes[0])
@@ -1549,11 +1596,13 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 		err := json.Unmarshal(data, &input)
 		if err != nil {
 			m := ErrorMessage{
-				Attempted: "json.Unmarshal",
-				Details: fmt.Sprintf("Error: %+v", err),
-				ErrorNo: http.StatusBadRequest,
-				Function: function,
-				Message: BAD_REQUEST,
+				Attempted: 	"json.Unmarshal",
+				Details: 	fmt.Sprintf("Error: %+v", err),
+				ErrorNo: 	http.StatusBadRequest,
+				Exit:		"{{exit01}}",
+				Function: 	function,
+				Message: 	BAD_REQUEST,
+				UnixTimestamp: time.Now().Unix(),
 			}
 			messages = append( messages, m )
 			return map[string][]map[string]any{}, messages
@@ -1580,6 +1629,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 					Attempted:  "{{type}}.Save(headers,link,values)",
 					Details:    ee.Details,
 					ErrorNo:    ee.ErrorNo,
+					Exit: 		"{{exit02""}},
 					FileName:   ee.FileName,
 					Function:   function,
 					InnerError: err,
@@ -1587,6 +1637,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 					Message:    message,
 					Payload: 	nil,
 					RequestUrl: ee.RequestUrl,
+					UnixTimestamp: time.Now().Unix(),
 				}
 				ee.RequestUrl = ""
 				messages = append(messages, m)
@@ -1611,6 +1662,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 				Attempted:     	"nullable.SetToMapSet(output)",
 				Details:       	ee.Details,
 				ErrorNo:       	ee.ErrorNo,
+				Exit:			"{{exit03}}",
 				FileName:    	ee.FileName,
 				Function:      	function,
 				InnerError:    	err,
@@ -1618,6 +1670,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 				Message:       	message,
 				Payload: 		nil,
 				RequestUrl: 	ee.RequestUrl,
+				UnixTimestamp: time.Now().Unix(),
 			}
 			messages = append(messages, m)
 		}
@@ -1667,6 +1720,10 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 	result = strings.ReplaceAll(result, "{{databaseName}}", set.Name)
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
+
+	result = strings.ReplaceAll(result, "{{exit01}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit02}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit03}}", rightUUID(12, false))
 
 	return result
 

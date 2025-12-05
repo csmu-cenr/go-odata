@@ -25,7 +25,6 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
 	Node(idOrEditLink string, options ODataQueryOptions) (ModelT, error)
-	//SingularValue(id string, options ODataQueryOptions) (ModelT, error)
 	Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	//MultipleMultiResult(options ODataQueryOptions) <-chan MultiResult[ModelT]
 	Insert(model ModelT, tags []string) (ModelT, error)
@@ -51,7 +50,7 @@ type apiMultiResponse[T any] struct {
 
 // apiSingleResponse
 type apiSingleResponse[T any] struct {
-	Value T `json:"value"`
+	Value T
 }
 
 type apiUpdateResponse[T any] struct {
@@ -452,7 +451,7 @@ func buildExecuteError(function, requestUrl string, options ODataQueryOptions, e
 func (dataSet odataDataSet[ModelT, Def]) Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
 	name := typename.ShortTypeName[ModelT]()
-	function := fmt.Sprintf(`1odataClient.multiple.%s`, name)
+	function := fmt.Sprintf(`odataClient.set.%s`, name)
 
 	meta := make(chan Result, 1) // single send, so buffer 1
 	models := make(chan ModelT)
@@ -680,49 +679,6 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 
 	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
-
-// Singular model from the API by ID using the model json tags.
-// func (dataSet odataDataSet[ModelT, Def]) NodeJSON(id string, options ODataQueryOptions) (ModelT, error) {
-
-// 	functionName := `odataDataSet[ModelT, Def]) Singular`
-
-// 	var responseModel ModelT
-
-// 	requestUrl := dataSet.getSingleUrl(id)
-// 	urlArgments := options.ToQueryString()
-// 	if urlArgments != NOTHING {
-// 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
-// 	}
-// 	request, err := http.NewRequest("GET", requestUrl, nil)
-
-// 	if err != nil {
-// 		message := ErrorMessage{ErrorNo: http.StatusInternalServerError,
-// 			Message:    UNEXPECTED_ERROR,
-// 			Function:   functionName,
-// 			RequestUrl: requestUrl,
-// 			Options:    &options,
-// 			Details:    fmt.Sprintf(`%+v`, err)}
-// 		return responseModel, message
-// 	}
-// 	responseData, err := executeHttpRequest[ModelT](*dataSet.client, request)
-// 	if err != nil {
-// 		message := ErrorMessage{ErrorNo: http.StatusBadRequest,
-// 			Function:   functionName,
-// 			RequestUrl: requestUrl,
-// 			Options:    &options,
-// 			InnerError: err}
-// 		switch e := err.(type) {
-// 		case *ErrorMessage:
-// 			message.ErrorNo = e.ErrorNo
-// 		case ErrorMessage:
-// 			message.ErrorNo = e.ErrorNo
-// 		default:
-// 		}
-// 		return responseModel, message
-// 	}
-
-// 	return responseData, nil
-// }
 
 // Node model from the API using a Value tag, then model tags, by ID
 func (dataSet odataDataSet[ModelT, Def]) Node(id string, options ODataQueryOptions) (ModelT, error) {
