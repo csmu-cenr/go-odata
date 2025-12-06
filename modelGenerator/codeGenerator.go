@@ -188,6 +188,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		"net/url"
 		"strings"
 
+		nullable "github.com/Uffe-Code/go-nullable/nullable"
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
 	
@@ -216,6 +217,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		"fmt"
 		"net/http"
 		"net/url"
+		"time"
 
 		nullable "github.com/Uffe-Code/go-nullable/nullable"
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
@@ -248,6 +250,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		"net/url"
 		"reflect"
 		"strings"
+		"time"
 			
 		nullable "github.com/Uffe-Code/go-nullable/nullable"
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
@@ -1088,39 +1091,46 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 	}
 
 	if len(existing) > 0 {
+
 		// will only be one
 		for _, e := range existing {
+
 			if {{type}}.ODataEditLink == "" {
 				{{type}}.ODataEditLink = e.ODataEditLink
 			}
+	
 			if {{type}}.ODataEditLink != e.ODataEditLink {
 				message := UNEXPECTED_ERROR
-					m := ErrorMessage{
-						Attempted:  "",
-						Details:    	"{{type}}.ODataEditLink != e.ODataEditLink",
-						ErrorNo:    	http.StatusInternalServerError,
-						Exit:       	"{{exit04}}",
-						FileName:   	"",
-						Function:   	function,
-						InnerError: 	err,
-						IPAddress:  	"",
-						LineNumber: 	0,
-						Link:       	"",
-						Message:    	message,
-						Payload:    	nil,
-						RequestUrl: 	"",
-						User:       	nil,
-						UnixTimestamp: 	time.Now().Unix(),
-					}
-					return dereferenced, m
+				m := ErrorMessage{
+					Attempted:     "",
+					Details:       "{{type}}.ODataEditLink != e.ODataEditLink",
+					ErrorNo:       http.StatusInternalServerError,
+					Exit:          "{{exit04}}",
+					FileName:      "",
+					Function:      function,
+					InnerError:    nil, // no err in scope here
+					IPAddress:     "",
+					LineNumber:    0,
+					Link:          "",
+					Message:       message,
+					Payload:       nil,
+					RequestUrl:    "",
+					User:          nil,
+					UnixTimestamp: time.Now().Unix(),
 				}
+				return dereferenced, m
 			}
-			different, err := nullable.LeftIsDifferentFromRightIgnoring(reflect.ValueOf({{type}}), reflect.ValueOf(e), consider, icm)
+	
+			different, err := nullable.LeftIsDifferentFromRightIgnoring(
+				reflect.ValueOf({{type}}),
+				reflect.ValueOf(e),
+				consider,
+				icm,
+			)
 			if err != nil {
 				ee := ExtractError(err)
 				message := UNEXPECTED_ERROR
-				s, ok := ee.Message.(string)
-				if ok {
+				if s, ok := ee.Message.(string); ok {
 					message = s
 				}
 				m := ErrorMessage{
@@ -1139,20 +1149,26 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 				}
 				return dereferenced, m
 			}
+	
 			if len(different) > 0 {
 				di := []string{}
 				di = append(di, different...)
 				di = append(di, ignore...)
+	
 				cm := []string{}
 				cm = append(cm, consider...)
 				cm = append(cm, modification...)
-				modify, err := nullable.LeftIsDifferentFromRightIgnoring(reflect.ValueOf({{type}}), reflect.ValueOf(e), cm, di)
-				values.Set(MODIFIED, strings.Join(modify, COMMA))
+	
+				modify, err := nullable.LeftIsDifferentFromRightIgnoring(
+					reflect.ValueOf({{type}}),
+					reflect.ValueOf(e),
+					cm,
+					di,
+				)
 				if err != nil {
 					ee := ExtractError(err)
 					message := UNEXPECTED_ERROR
-					s, ok := ee.Message.(string)
-					if ok {
+					if s, ok := ee.Message.(string); ok {
 						message = s
 					}
 					m := ErrorMessage{
@@ -1173,13 +1189,18 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 					ee.RequestUrl = ""
 					return dereferenced, m
 				}
+	
+				values.Set(MODIFIED, strings.Join(modify, COMMA))
+	
 				modify = append(modify, different...)
-				err = nullable.SetLeftModified(reflect.ValueOf({{type}}), reflect.ValueOf(e), modify)
-				if err != nil {
+				if err := nullable.SetLeftModified(
+					reflect.ValueOf({{type}}),
+					reflect.ValueOf(e),
+					modify,
+				); err != nil {
 					ee := ExtractError(err)
 					message := UNEXPECTED_ERROR
-					s, ok := ee.Message.(string)
-					if ok {
+					if s, ok := ee.Message.(string); ok {
 						message = s
 					}
 					m := ErrorMessage{
@@ -1200,10 +1221,12 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 					return dereferenced, m
 				}
 			} else {
+				// existing record is present and nothing differs
 				return dereferenced, nil
 			}
 		}
 	} else {
+		// Set all fields that are selected to modified
 		nullable.SetModifiedIfSelected(reflect.ValueOf({{type}}))
 	}
 
@@ -1510,6 +1533,8 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 	result := `// {{publicName}}.Update saves the record at the link provided the authentication provided in headers is valid.
 	func ({{type}} *{{publicName}}) Update(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
 
+		function := "{{publicName}}.Update"
+
 		{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
 			{{g.Package.OdataAlias}}.AddHeader(key, value)
@@ -1520,7 +1545,7 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 
 		modify := values.Get(MODIFIED)
 		if modify == "" {
-			modifiedFields := nullable.GetModifiedTags(r)
+			modifiedFields := nullable.GetModifiedTags({{type}})
 			modify = strings.Join(modifiedFields, COMMA)
 		}
 		values.Set(SELECT, modify)
@@ -1629,7 +1654,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 					Attempted:  "{{type}}.Save(headers,link,values)",
 					Details:    ee.Details,
 					ErrorNo:    ee.ErrorNo,
-					Exit: 		"{{exit02""}},
+					Exit: 		"{{exit02}}",
 					FileName:   ee.FileName,
 					Function:   function,
 					InnerError: err,
@@ -1873,13 +1898,10 @@ func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 	result := `
 
 	case "{{databaseName}}":
-		collection := New{{publicName}}Collection(client)
-		dataset := collection.DataSet()
-		meta, data, errs := dataset.Set(options)
-		for err := range errs {
-			return nil, err
-		}
-		fields := strings.Split(options.Select, ",")
+		
+		function := "SelectByTableName.{{publicName}}"
+
+		fields := strings.Split(values.Get(SELECT), COMMA)
 		if options.ODataId == "true" {
 			fields = append(fields, "@odata.id")
 		}
@@ -1892,17 +1914,58 @@ func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 		if options.ODataReadLink == "true" {
 			fields = append(fields, "@odata.readLink")
 		}
-		result := make([]map[string]any, 0)
-		for range meta {
-			fields = RemoveEnclosingQuotes(fields)
-			for model := range data {
-				data, err := {{g.Package.OdataAlias}}.StructToMap(model, fields)
-				if err != nil {
-					return result, err
-				}
-				result = append(result, data)
+
+		found, err := {{publicName}}Set(defaultFilter, values, headers, link)
+		if err != nil {
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
 			}
+			m := ErrorMessage{
+				Attempted:  "{{publicName}}Set",
+				Code:       e.Code,
+				Details:    e.Details,
+				ErrorNo:    e.ErrorNo,
+				Exit:       "{{exit01}}",
+				FileName:   e.FileName,
+				Function:   function,
+				InnerError: err,
+				LineNumber: e.LineNumber,
+				Message:    message,
+				Payload:    nil,
+				RequestUrl: e.RequestUrl,
+				User:       nil,
+			}
+			return []map[string]any{}, m
 		}
+		result, err := nullable.StructSetToMapSet(found, fields)
+		if err != nil {
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
+			}
+			m := ErrorMessage{
+				Attempted:  "nullable.StructSetToMapSet",
+				Code:       e.Code,
+				Details:    e.Details,
+				ErrorNo:    e.ErrorNo,
+				Exit:       "{{exit02}}",
+				FileName:   e.FileName,
+				Function:   function,
+				InnerError: err,
+				LineNumber: e.LineNumber,
+				Message:    message,
+				Payload:    nil,
+				RequestUrl: e.RequestUrl,
+				User:       nil,
+			}
+			return []map[string]any{}, m
+		}
+
 		return result, nil
 
 `
@@ -1911,6 +1974,9 @@ func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 	result = strings.ReplaceAll(result, "{{publicName}}", publicName)
 	result = strings.ReplaceAll(result, "{{g.Package.OdataAlias}}", g.Package.OdataAlias)
 	result = strings.ReplaceAll(result, "{{options}}", options)
+
+	result = strings.ReplaceAll(result, "{{exit01}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit02}}", rightUUID(12, false))
 
 	return result
 
