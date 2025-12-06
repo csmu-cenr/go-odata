@@ -70,6 +70,9 @@ type odataMultiDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Values) ODataQueryOptions {
 
+	options.Arguments.DefaultFilter = defaultFilter
+	options.Arguments.Values = v
+
 	// Determine if the field names should be quoted
 	if v.Has(QUOTED) {
 		options.Quoted = v.Get(QUOTED) == TRUE
@@ -152,18 +155,18 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Valu
 	options.ODataId = v.Get(ODATAID)
 	options.ODataReadLink = v.Get(ODATAREADLINK)
 
-	filterValue := v.Get(FILTER)
-	if defaultFilter == NOTHING && filterValue != NOTHING {
-		options.Filter = filterValue
+	filter := v.Get(FILTER)
+	if defaultFilter == NOTHING && filter != NOTHING {
+		options.Filter = filter
 	}
-	if defaultFilter != NOTHING && filterValue == NOTHING {
+	if defaultFilter != NOTHING && filter == NOTHING {
 		options.Filter = defaultFilter
 	}
-	if defaultFilter != NOTHING && filterValue != NOTHING {
-		if defaultFilter == filterValue {
+	if defaultFilter != NOTHING && filter != NOTHING {
+		if defaultFilter == filter {
 			options.Filter = defaultFilter
 		} else {
-			options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
+			options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filter)
 		}
 	}
 

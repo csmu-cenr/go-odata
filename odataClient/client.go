@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -69,6 +70,10 @@ func getFullURL(req *http.Request) string {
 }
 
 type ODataQueryOptions struct {
+	Arguments struct {
+		DefaultFilter string     `json:"defaultFilter"`
+		Values        url.Values `json:"url.Values"`
+	}
 	Table   string `json:"table,omitempty"`
 	Select  string `json:"select,omitempty"`
 	Filter  string `json:"filter,omitempty"`
