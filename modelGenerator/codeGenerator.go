@@ -248,6 +248,7 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		"fmt"
 		"net/http"
 		"net/url"
+		"path"
 		"reflect"
 		"strings"
 		"time"
@@ -255,6 +256,24 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 		nullable "github.com/Uffe-Code/go-nullable/nullable"
 		{{g.Package.OdataAlias}} "github.com/Uffe-Code/go-odata/odataClient"
 	)
+
+	// RemoveLastPathSegment removes the final segment of the URL path safely.
+	func RemoveLastPathSegment(raw string) (string, error) {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return "", err
+		}
+
+		// Clean and trim the last element
+		u.Path = path.Dir(u.Path)
+
+		// Special case: path.Dir("/") returns "."
+		if u.Path == "." {
+			u.Path = "/"
+		}
+
+		return u.String(), nil
+	}
 
 `, g.Package.Name)
 
@@ -1061,7 +1080,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 			return dereferenced, m
 		}
 	} else {
-		node, err = {{publicName}}Node(defaultFilter, values, headers, link)
+		node, err = {{type}}.Retrieve(headers, link, values)
 		if err != nil {
 			ee := ExtractError(err)
 			message := UNEXPECTED_ERROR
@@ -1103,7 +1122,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 				message := UNEXPECTED_ERROR
 				m := ErrorMessage{
 					Attempted:     "",
-					Details:       "{{type}}.ODataEditLink != e.ODataEditLink",
+					Details:       fmt.Sprintf("{{type}}.ODataEditLink: '%s' != e.ODataEditLink: '%s'", {{type}}.ODataEditLink, e.ODataEditLink ),
 					ErrorNo:       http.StatusInternalServerError,
 					Exit:          "{{exit04}}",
 					FileName:      "",
@@ -1190,9 +1209,9 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 					return dereferenced, m
 				}
 	
-				values.Set(MODIFIED, strings.Join(modify, COMMA))
-	
 				modify = append(modify, different...)
+				values.Set(MODIFIED, strings.Join(modify, COMMA))
+
 				if err := nullable.SetLeftModified(
 					reflect.ValueOf({{type}}),
 					reflect.ValueOf(e),
@@ -1428,6 +1447,105 @@ func ({{type}} *{{publicName}}) Mapped() (result map[string]any, err error) {
 }
 
 
+func ({{type}} {{publicName}}) Retrieve(headers map[string]string, link string, values url.Values) ({{publicName}}, error) {
+
+	function := "{{publicName}}.Retrieve"
+
+	if {{type}}.ODataEditLink == "" {
+		message := BAD_REQUEST
+		m := ErrorMessage{
+			Attempted:  "",
+			Details:    "{{type}}.ODataEditLink is empty",
+			ErrorNo:    http.StatusInternalServerError,
+			Exit:       "{{exit15}}",
+			FileName:   "",
+			Function:   function,
+			InnerError: nil,
+			IPAddress:  "",
+			LineNumber: 0,
+			Link:       "",
+			Message:    message,
+			Payload:    nil,
+			RequestUrl: "",
+			User:       nil,
+		}
+		return {{publicName}}{}, m
+	}
+
+	link, err := RemoveLastPathSegment({{type}}.ODataEditLink)
+	if err != nil {
+		message := UNEXPECTED_ERROR
+		m := ErrorMessage{
+			Attempted:  "RemoveLastPathSegment",
+			Details:    fmt.Sprintf("error: %+s", err),
+			ErrorNo:    http.StatusInternalServerError,
+			Exit:       "{{exit16}}",
+			FileName:   "",
+			Function:   function,
+			InnerError: err,
+			IPAddress:  "",
+			LineNumber: 0,
+			Link:       "",
+			Message:    message,
+			Payload:    nil,
+			RequestUrl: "",
+			User:       nil,
+		}
+		return {{publicName}}{}, m
+	}
+
+	defaultFilter := ""
+
+	{{g.Package.OdataAlias}} := {{g.Package.OdataAlias}}.New(link)
+	for key, value := range headers {
+		{{g.Package.OdataAlias}}.AddHeader(key, value)
+	}
+
+	collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
+	dataset := collection.DataSet()
+
+	options := odata.ODataQueryOptions()
+	options = options.ApplyArguments(defaultFilter, values)
+
+	retrieved, err := dataset.Node({{type}}.ODataEditLink, options)
+	if err != nil {
+
+		// try the old way
+		{{guardValue}}
+		{{guardFilter}}
+		values.Set(FILTER, guardFilter)
+
+		retrieved, err = {{publicName}}Node(values.Get(DEFAULT_FILTER), values, headers, link)
+		if err != nil {
+			e := ExtractError(err)
+			message := UNEXPECTED_ERROR
+			s, ok := e.Message.(string)
+			if ok {
+				message = s
+			}
+			m := ErrorMessage{
+				Attempted:  "{{publicName}}Node",
+				Code:       e.Code,
+				Details:    e.Details,
+				ErrorNo:    e.ErrorNo,
+				Exit:       "{{exit17}}",
+				FileName:   e.FileName,
+				Function:   function,
+				InnerError: err,
+				LineNumber: e.LineNumber,
+				Message:    message,
+				Payload:    guardFilter,
+				RequestUrl: e.RequestUrl,
+				User:       nil,
+			}
+			return {{publicName}}{}, m
+		}
+	}
+
+	return retrieved, nil
+
+}
+
 `
 
 	result = strings.ReplaceAll(result, "{{exit01}}", rightUUID(12, false))
@@ -1448,6 +1566,10 @@ func ({{type}} *{{publicName}}) Mapped() (result map[string]any, err error) {
 
 	result = strings.ReplaceAll(result, "{{exit13}}", rightUUID(12, false))
 	result = strings.ReplaceAll(result, "{{exit14}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit15}}", rightUUID(12, false))
+
+	result = strings.ReplaceAll(result, "{{exit16}}", rightUUID(12, false))
+	result = strings.ReplaceAll(result, "{{exit17}}", rightUUID(12, false))
 
 	result = strings.ReplaceAll(result, "{{guardValid}}", guardValid)
 	result = strings.ReplaceAll(result, "{{guardValue}}", guardValue)

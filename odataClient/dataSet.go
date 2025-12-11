@@ -686,7 +686,7 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 // Node model from the API using a Value tag, then model tags, by ID
 func (dataSet odataDataSet[ModelT, Def]) Node(id string, options ODataQueryOptions) (ModelT, error) {
 
-	functionName := `odataDataSet[ModelT, Def]) SingularValue`
+	functionName := `odataDataSet[ModelT, Def]) Node`
 
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()

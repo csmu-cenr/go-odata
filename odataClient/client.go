@@ -222,23 +222,32 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		message := ErrorMessage{
+		m := ErrorMessage{
 			Attempted:  "body, err := io.ReadAll(response.Body)",
+			Code:       "",
 			ErrorNo:    response.StatusCode,
 			Exit:       "83cc31d60828",
 			Function:   function,
 			InnerError: err,
+			Message:    UNEXPECTED_ERROR,
 			RequestUrl: link,
 		}
-		return t, message
+		return t, m
 	}
 	if response.StatusCode >= http.StatusBadRequest {
+		var codeMessage struct {
+			CodeMessage struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
 		m := ErrorMessage{
 			Attempted:     "response, err := client.httpClient.Do(req)",
+			Code:          codeMessage.CodeMessage.Code,
 			ErrorNo:       response.StatusCode,
 			Exit:          "220bc130aa31",
 			Function:      function,
-			Message:       UNEXPECTED_ERROR,
+			Message:       codeMessage.CodeMessage.Message,
 			RequestUrl:    link,
 			UnixTimestamp: time.Now().Unix(),
 		}
