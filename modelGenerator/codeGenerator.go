@@ -326,7 +326,7 @@ import (
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			modelCode += "\n" + g.generateModelStruct(complexType, map[string]string{}) + "\n"
+			modelCode += "\n" + g.generateModelStruct(complexType, map[string]string{}, map[string]string{}, map[string]string{}) + "\n"
 		}
 
 		var names []string
@@ -391,11 +391,11 @@ import (
 			if generateModelStruct {
 				if !modelStruct.Ignore {
 					g.DebugFunction = &modelStruct
-					result := g.generateModelStruct(set.getEntityType(), map[string]string{})
+					result := g.generateModelStruct(set.getEntityType(), map[string]string{}, map[string]string{}, map[string]string{})
 					fmt.Printf("\n\n%s\n\n", result)
 				}
 			}
-			modelCode += "\n" + g.generateModelStruct(set.getEntityType(), fieldsMap) + "\n"
+			modelCode += "\n" + g.generateModelStruct(set.getEntityType(), fieldsMap, map[string]string{}, map[string]string{}) + "\n"
 			modelCode += "\n" + g.ModelDefinition(set) + "\n"
 			saveCode += "\n" + g.SaveCode(set, fieldsMap) + "\n"
 			selectByTableName += "\n" + g.SelectByTableName(set, selectByTableNameOptions) + "\n"
@@ -504,7 +504,7 @@ func (g *Generator) FieldConstants(dataService edmxDataServices) string {
 	return result
 }
 
-func (g *Generator) generateModelStruct(entityType edmxEntityType, fieldsMap map[string]string) string {
+func (g *Generator) generateModelStruct(entityType edmxEntityType, primariesMap, creationsMap, modificationsMap map[string]string) string {
 
 	publicName := publicAttribute(entityType.Name)
 	structString := fmt.Sprintf("type %s struct {", publicName)
@@ -591,7 +591,7 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType, fieldsMap map
 			name = prop.Name
 			if g.Fields.Public {
 				name = publicAttribute(name)
-				fieldsMap[p] = p
+				primariesMap[p] = p
 			}
 			if g.Fields.Json.Tags {
 				jsonSupport = prop.Name
@@ -828,8 +828,8 @@ func (g Generator) InsertCode(set edmxEntitySet) string {
 	
 	collection := New{{publicName}}Collection({{g.Package.OdataAlias}})
 	dataset := collection.DataSet()
-	modifiedFields := nullable.GetModifiedTags({{type}})
-	selectedFields := nullable.GetSelectedTags({{type}},false)
+	modifiedFields := {{type}}.GetModifiedTags()
+	selectedFields := {{type}}.GetSelectedTags()
 
 	result, err := dataset.Insert(*{{type}}, modifiedFields)
 	if err != nil {
@@ -1417,6 +1417,10 @@ func ({{type}} *{{publicName}}) GetModifiedTags() []string {
 	return nullable.GetModifiedTags({{type}})
 }
 
+func ({{type}} *{{publicName}}) GetSelectedTags() []string {
+	return nullable.GetSelectedTags({{type}},false)
+}
+
 func ({{type}} *{{publicName}}) Mapped() (result map[string]any, err error) {
 
 	function := "{{publicName}}.Mapped"
@@ -1737,7 +1741,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 
 		function := "saveByTableName.{{databaseName}}"
 
-		input := map[string]{{publicName}}{}
+		input := []{{publicName}}{}
 		output := []{{publicName}}{}
 
 		err := json.Unmarshal(data, &input)
@@ -1760,10 +1764,13 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 		// make sure fields are populated
 		for _, {{type}} := range input {
 			errored := false
-			{{checks}}
+			if {{type}}.ODataEditLink == "" {
+				{{checks}}
+			}
 			if errored {
 				continue
 			}
+			{{modifiedByAt}}
 			saved, err := {{type}}.Save(headers,link,values)
 			if err != nil {
 				ee := ExtractError(err)
@@ -1825,7 +1832,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet, fields map[string]string) 
 		return results, messages
 `
 	checks := ""
-	for _, m := range g.Fields.Mandatory {
+	for _, m := range g.Fields.Primary {
 		_, found := fields[m.Name]
 		if found {
 			fieldName := snakeCaseToTitleCase(m.Name)

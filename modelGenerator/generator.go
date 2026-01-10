@@ -23,14 +23,16 @@ func (e ErrorMessage) Error() string {
 }
 
 type Fields struct {
-	Extras      []string          `json:"extras"`
-	Ignore      Ignore            `json:"ignore"`
-	Json        JsonTags          `json:"json"`
-	Mandatory   []Mandatory       `json:"mandatory"`
-	Public      bool              `json:"public"` // Change a_field__name__ to AFieldName
-	Pointers    bool              `json:"pointers"`
-	ReadOnlyTag string            `json:"readOnlyTag"`
-	Swap        map[string]string `json:"swap"`
+	Extras       []string          `json:"extras"`
+	Ignore       Ignore            `json:"ignore"`
+	Json         JsonTags          `json:"json"`
+	Primary      []Primary         `json:"primary"`
+	Creations    []string          `json:"creations"`
+	Modifcations []string          `json:"modifications"`
+	Public       bool              `json:"public"` // Change a_field__name__ to AFieldName
+	Pointers     bool              `json:"pointers"`
+	ReadOnlyTag  string            `json:"readOnlyTag"`
+	Swap         map[string]string `json:"swap"`
 }
 
 type Ignore struct {
@@ -81,7 +83,13 @@ type Set struct {
 	Ignore bool   `json:"ignore"`
 }
 
-type Mandatory struct {
+type Modification struct {
+	Name    string `json:"name"`
+	SetData bool   `json:"set_data"`
+	Valid   bool   `json:"valid"`
+}
+
+type Primary struct {
 	Name     string `json:"name"`
 	Selected bool   `json:"selected"`
 	Valid    bool   `json:"valid"`
