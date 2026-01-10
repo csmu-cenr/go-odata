@@ -29,6 +29,7 @@ const (
 	SKIP                             = `$skip`
 	TOP                              = `$top`
 	TRUE                             = `true`
+	UNEXPECTED_ERROR                 = `unexpected error`
 	UUID_EQ_S                        = `uuid eq '%s'`
 	VALUE                            = `$value`
 )
