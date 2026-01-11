@@ -504,6 +504,46 @@ func (g *Generator) FieldConstants(dataService edmxDataServices) string {
 	return result
 }
 
+func (g *Generator) generateEnumStruct(enum edmxEnumType) string {
+	stringValues := map[string]string{}
+	intValues := map[int64]string{}
+	isIntValues := true
+
+	for _, member := range enum.Members {
+		stringValues[member.Name] = member.Value
+		i, err := strconv.ParseInt(member.Value, 10, 64)
+		if err != nil {
+			isIntValues = false
+		} else {
+			intValues[i] = member.Name
+		}
+	}
+
+	goType := "string"
+	if isIntValues {
+		goType = "int64"
+	}
+	goString := fmt.Sprintf(`type %s %s
+
+const (`, enum.Name, goType)
+
+	if isIntValues {
+		intKeys := sortedKeys(intValues)
+		for _, i := range intKeys {
+			key := intValues[i]
+			goString += fmt.Sprintf("\n\t%s %s = %d", key, enum.Name, i)
+		}
+	} else {
+		stringKeys := sortedKeys(stringValues)
+		for _, key := range stringKeys {
+			str := stringValues[key]
+			goString += fmt.Sprintf("\n\t%s %s = \"%s\"", key, enum.Name, str)
+		}
+	}
+
+	return goString + "\n)"
+}
+
 func (g *Generator) generateModelStruct(entityType edmxEntityType, primariesMap, creationsMap, modificationsMap map[string]string) string {
 
 	publicName := publicAttribute(entityType.Name)

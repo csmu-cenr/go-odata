@@ -29,11 +29,12 @@ func Test_Generate_struct(t *testing.T) {
 func Test_Generate_enum(t *testing.T) {
 	edmx, _ := getParsedEdmx()
 	genderEnum := edmx.EnumTypes["PersonGender"]
+	g := Generator{}
 	assert.Equal(t, `type PersonGender int64
 
 const (
 	Male PersonGender = 0
 	Female PersonGender = 1
 	Unknown PersonGender = 2
-)`, generateEnumStruct(genderEnum))
+)`, g.generateEnumStruct(genderEnum))
 }
