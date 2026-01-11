@@ -225,6 +225,7 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 		m := ErrorMessage{
 			Attempted:  "body, err := io.ReadAll(response.Body)",
 			Code:       "",
+			Details:    string(body),
 			ErrorNo:    response.StatusCode,
 			Exit:       "83cc31d60828",
 			Function:   function,
@@ -244,6 +245,7 @@ func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error)
 		m := ErrorMessage{
 			Attempted:     "response, err := client.httpClient.Do(req)",
 			Code:          codeMessage.CodeMessage.Code,
+			Details:       string(body),
 			ErrorNo:       response.StatusCode,
 			Exit:          "220bc130aa31",
 			Function:      function,
