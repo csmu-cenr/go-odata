@@ -1,17 +1,19 @@
 package modelGenerator
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_Generate_struct(t *testing.T) {
 	edmx, _ := getParsedEdmx()
 	peopleSet := edmx.EntitySets["People"]
+	// 	g := Generator{}
 
 	g := Generator{}
 	actual := g.generateModelStruct(peopleSet.getEntityType())
-	
+
 	assert.Contains(t, actual, `type Person struct {`)
 	assert.Contains(t, actual, `AddressInfo []Location`)
 	assert.Contains(t, actual, `Age nullable.Nullable[int64]`)
@@ -26,6 +28,7 @@ func Test_Generate_struct(t *testing.T) {
 	assert.Contains(t, actual, `UserName string`)
 	assert.Contains(t, actual, `type	PersonAlias	[]Person`)
 	assert.Contains(t, actual, `type MetaPerson struct {`)
+
 }
 
 func Test_Generate_definition(t *testing.T) {

@@ -13,11 +13,21 @@ import (
 )
 
 type testModel struct {
-	Id          int                      `json:"Id"`
-	Number      string                   `json:"Number"`
-	Name        string                   `json:"Name"`
+	// <<<<<<< HEAD
+	Id          int                       `json:"Id"`
+	Number      string                    `json:"Number"`
+	Name        string                    `json:"Name"`
 	ParentId    nullable.Nullable[int]    `json:"ParentId"`
 	Description nullable.Nullable[string] `json:"Description"`
+	// =======
+	//
+	//	Id          int                       `json:"id"`
+	//	Number      string                    `json:"number"`
+	//	Name        string                    `json:"name"`
+	//	ParentId    nullable.Nullable[int]    `json:"parentId"`
+	//	Description nullable.Nullable[string] `json:"description"`
+	//
+	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
 }
 
 type testModelDefinition[T any] struct {
@@ -119,7 +129,11 @@ func TestOdataDataSet_List(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
+	//<<<<<<< HEAD
 	metaChan, modelsChan, errsChan := dataSet.List(ODataQueryOptions{})
+	// =======
+	// 	_, models, _ := dataSet.List(ODataQueryOptions{})
+	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
 
 	var models []testModel
 	done := make(chan bool)
@@ -176,7 +190,12 @@ func Test_Insert(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
+	//<<<<<<< HEAD
 	res, err := dataSet.Insert(model, []string{})
+	// =======
+	// 	tags := []string{`id`, `number`, `name`, `parentId`, `description`}
+	// 	res, err := dataSet.Insert(model, tags)
+	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
 	assert.False(t, res.ParentId.IsValid)
@@ -194,7 +213,7 @@ func Test_Update(t *testing.T) {
 			panic("wrong request method " + request.Method)
 		}
 		writer.WriteHeader(200)
-		
+
 		// Read the body to see what was sent
 		buf := &bytes.Buffer{}
 		_, _ = buf.ReadFrom(request.Body)
@@ -224,7 +243,9 @@ func Test_Update(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
+
 	res, err := dataSet.Update("5", model, url.Values{"select": []string{"Id,Number,Name,ParentId,Description"}})
+
 	assert.NoError(t, err)
 	assert.Equal(t, 5, res.Id)
 	assert.Equal(t, "1234", res.Number)
