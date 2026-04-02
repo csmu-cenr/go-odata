@@ -200,11 +200,11 @@ func Test_Parse_edmx(t *testing.T) {
 	usernameProperty, ok := personEntityType.Properties["UserName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", usernameProperty.Type)
-	assert.Equal(t, "string", usernameProperty.goType())
+	assert.Equal(t, "string", usernameProperty.goType(false, false, false))
 	lastNameProperty, ok := personEntityType.Properties["LastName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", lastNameProperty.Type)
-	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType())
+	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType(false, false, false))
 
 	peopleEntitySet := edmx.EntitySets["People"]
 	assert.Equal(t, "Trippin.Person", peopleEntitySet.EntityType)

@@ -948,15 +948,32 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 	
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List(options)
+		metaChan, modelsChan, errsChan := dataset.List(options)
 	
 		models := []{{publicName}}{}
-		for err := range errs {
-			return nil, err
-		}
-		for range meta {
-			for model := range data {
-				models = append(models, model)
+		
+		for {
+			select {
+			case err, ok := <-errsChan:
+				if ok && err != nil {
+					return nil, err
+				}
+				if !ok {
+					errsChan = nil
+				}
+			case _, ok := <-metaChan:
+				if !ok {
+					metaChan = nil
+				}
+			case model, ok := <-modelsChan:
+				if ok {
+					models = append(models, model)
+				} else {
+					modelsChan = nil
+				}
+			}
+			if errsChan == nil && metaChan == nil && modelsChan == nil {
+				break
 			}
 		}
 	
@@ -980,10 +997,9 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 	case "{{databaseName}}":
 		collection := New{{publicName}}Collection({{client}})
 		dataset := collection.DataSet()
-		meta, data, errs := dataset.List(options)
-		for err := range errs {
-			return nil, err
-		}
+		metaChan, modelsChan, errsChan := dataset.List(options)
+		
+		result := make([]map[string]interface{}, 0)
 		fields := strings.Split(options.Select, ",")
 		if options.ODataId == "true" {
 			fields = append(fields, "@odata.id")
@@ -997,15 +1013,34 @@ func generateSelectByTableName(set edmxEntitySet, client string, options string)
 		if options.ODataReadLink == "true" {
 			fields = append(fields, "@odata.readLink")
 		}
-		result := make([]map[string]interface{}, 0)
-		for range meta {
-			fields = RemoveEnclosingQuotes(fields)
-			for model := range data {
-				data, err := odataClient.StructToMap(model, fields)
-				if err != nil {
-					return result, err
+		fields = RemoveEnclosingQuotes(fields)
+
+		for {
+			select {
+			case err, ok := <-errsChan:
+				if ok && err != nil {
+					return nil, err
 				}
-				result = append(result, data)
+				if !ok {
+					errsChan = nil
+				}
+			case _, ok := <-metaChan:
+				if !ok {
+					metaChan = nil
+				}
+			case model, ok := <-modelsChan:
+				if ok {
+					data, err := odataClient.StructToMap(model, fields)
+					if err != nil {
+						return result, err
+					}
+					result = append(result, data)
+				} else {
+					modelsChan = nil
+				}
+			}
+			if errsChan == nil && metaChan == nil && modelsChan == nil {
+				break
 			}
 		}
 		return result, nil
