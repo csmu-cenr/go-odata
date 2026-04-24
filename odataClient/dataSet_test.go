@@ -190,12 +190,9 @@ func Test_Insert(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
-	//<<<<<<< HEAD
+
 	res, err := dataSet.Insert(model, []string{})
-	// =======
-	// 	tags := []string{`id`, `number`, `name`, `parentId`, `description`}
-	// 	res, err := dataSet.Insert(model, tags)
-	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
+
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
 	assert.False(t, res.ParentId.IsValid)
