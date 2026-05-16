@@ -23,3 +23,6 @@ __DEBUG*
 # confidential configuration details
 config.json
 models-config.json
+
+# priset sessions https://priset.ai/#pitch
+priset/
