@@ -26,3 +26,6 @@ models-config.json
 
 # priset sessions https://priset.ai/#pitch
 priset/
+
+# priset guidelines https://docs.priset.ai/tutorial-basics/project-persona/#gsc.tab=0
+helper.priset
