@@ -89,7 +89,10 @@ func New(path string) (Generator, error) {
 }
 
 func (g Generator) metadataUrl() string {
-	return strings.TrimRight(g.ApiUrl, "/") + "/$metadata"
+	if strings.HasPrefix(g.ApiUrl, "http://") || strings.HasPrefix(g.ApiUrl, "https://") {
+		return strings.TrimRight(g.ApiUrl, "/") + "/$metadata"
+	}
+	return g.ApiUrl
 }
 
 func (g Generator) GenerateCode() error {
