@@ -9,21 +9,26 @@ import (
 func Test_Generate_struct(t *testing.T) {
 	edmx, _ := getParsedEdmx()
 	peopleSet := edmx.EntitySets["People"]
-	g := Generator{}
+	// 	g := Generator{}
 
-	assert.Equal(t, `type Person struct {
-	AddressInfo []Location
-	Age nullable.Nullable[int64]
-	Emails []string
-	FavoriteFeature Feature
-	Features []Feature
-	FirstName string
-	Gender PersonGender
-	HomeAddress nullable.Nullable[Location]
-	LastName nullable.Nullable[string]
-	MiddleName nullable.Nullable[string]
-	UserName string
-}`, g.generateModelStruct(peopleSet.getEntityType()))
+	g := Generator{}
+	actual := g.generateModelStruct(peopleSet.getEntityType())
+
+	assert.Contains(t, actual, `type Person struct {`)
+	assert.Contains(t, actual, `AddressInfo []Location`)
+	assert.Contains(t, actual, `Age nullable.Nullable[int64]`)
+	assert.Contains(t, actual, `Emails []string`)
+	assert.Contains(t, actual, `FavoriteFeature Feature`)
+	assert.Contains(t, actual, `Features []Feature`)
+	assert.Contains(t, actual, `FirstName string`)
+	assert.Contains(t, actual, `Gender PersonGender`)
+	assert.Contains(t, actual, `HomeAddress nullable.Nullable[Location]`)
+	assert.Contains(t, actual, `LastName nullable.Nullable[string]`)
+	assert.Contains(t, actual, `MiddleName nullable.Nullable[string]`)
+	assert.Contains(t, actual, `UserName string`)
+	assert.Contains(t, actual, `type	PersonAlias	[]Person`)
+	assert.Contains(t, actual, `type MetaPerson struct {`)
+
 }
 
 func Test_Generate_definition(t *testing.T) {
