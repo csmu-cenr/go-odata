@@ -207,14 +207,14 @@ func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQue
 	return responseData.Value, nil
 }
 
-func contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
+// func contains(slice []string, value string) bool {
+// 	for _, v := range slice {
+// 		if v == value {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
 // List data from the API
 func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
