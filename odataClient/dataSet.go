@@ -601,12 +601,15 @@ func isDoubleQuoted(field string) bool {
 func quoteCommaDelimited(input string) string {
 	delimiter := `"`
 
+	input = strings.ReplaceAll(input, `"`, ``)
+	input = strings.ReplaceAll(input, `'`, ``)
+	input = strings.ReplaceAll(input, `'`, ` `)
+
 	// Split the string by commas
 	parts := strings.Split(input, ",")
 
 	// Process each part, strip existing quotes and enclose in double quotes
 	for i, part := range parts {
-		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
 		parts[i] = fmt.Sprintf(`%s%s%s`, delimiter, part, delimiter)
 	}
 
