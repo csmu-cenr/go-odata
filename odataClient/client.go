@@ -164,15 +164,15 @@ func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T
 	colonSpaceQuestion := []byte(`": ?`)
 	colonNull := []byte(`": null`)
 	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
-	if err != nil {
-		modelError := ErrorMessage{
-			Message:   err.Error(),
-			Function:  "odataClient.executeHttpRequest",
-			Attempted: "json.MarshalIndent",
-			Body:      string(sanitised),
-			Details:   err}
-		return responseData, modelError
-	}
+	// if err != nil {
+	// 	modelError := ErrorMessage{
+	// 		Message:   err.Error(),
+	// 		Function:  "odataClient.executeHttpRequest",
+	// 		Attempted: "json.MarshalIndent",
+	// 		Body:      string(sanitised),
+	// 		Details:   err}
+	// 	return responseData, modelError
+	// }
 	err = json.Unmarshal(sanitised, &responseData)
 	if err != nil {
 		modelError := ErrorMessage{
