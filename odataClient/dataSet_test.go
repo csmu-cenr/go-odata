@@ -78,7 +78,7 @@ func TestOdataDataSet_Single(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	model, err := dataSet.Single("5")
+	model, err := dataSet.Single("5", ODataQueryOptions{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, model.Id)
 	assert.Equal(t, "002", model.Number)
@@ -122,7 +122,7 @@ func TestOdataDataSet_List(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	models, _ := dataSet.List(ODataFilter{})
+	_, models, _ := dataSet.List(ODataQueryOptions{})
 
 	i := 0
 	for model := range models {
@@ -170,7 +170,7 @@ func Test_Insert(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
-	res, err := dataSet.Insert(model)
+	res, err := dataSet.Insert(model, []string{})
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
 	assert.False(t, res.ParentId.IsValid)
@@ -207,7 +207,7 @@ func Test_Update(t *testing.T) {
 		ParentId:    nullable.Null[int](),
 		Description: nullable.Null[string](),
 	}
-	res, err := dataSet.Update("5", model)
+	res, err := dataSet.Update("5", model, []string{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, res.Id)
 	assert.False(t, res.ParentId.IsValid)
