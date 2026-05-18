@@ -35,19 +35,25 @@ func (ts ErrorMessage) Error() string {
 }
 
 type ODataQueryOptions struct {
-	Select  string
-	Filter  string
-	Count   string
-	Top     string
-	Skip    string
-	OrderBy string
-	Format  string
+	Table   string `json:"table,omitempty"`
+	Select  string `json:"select,omitempty"`
+	Filter  string `json:"filter,omitempty"`
+	Count   string `json:"count,omitempty"`
+	Top     string `json:"top,omitempty"`
+	Skip    string `json:"skip,omitempty"`
+	Limit   string `json:"limit,omitempty"`
+	OrderBy string `json:"orderBy,omitempty"`
+	Format  string `json:"format,omitempty"`
+	Quoted  bool   `json:"quoted"`
+	Escape  bool   `json:"escape"`
 
-	Expand        string
-	ODataEditLink string
-	ODataEtag     string
-	ODataId       string
-	ODataReadLink string
+	Expand              string `json:"expand,omitempty"`
+	ODataEditLink       string `json:"odataEditLink,omitempty"`
+	ODataNavigationLink string `json:"odataNavigationLink,omitempty"`
+	ODataEtag           string `json:"odataEtag,omitempty"`
+	ODataId             string `json:"odataId,omitempty"`
+	ODataReadLink       string `json:"odataReadLink,omitempty"`
+	TimeOut             int    `json:"timeOut"`
 }
 
 func (o *ODataQueryOptions) Fields() []string {
