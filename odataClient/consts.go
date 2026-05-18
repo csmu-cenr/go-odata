@@ -4,11 +4,16 @@ package odataClient
 // Used here to make it easy to swap the dollar signs in or out.
 // When they are no longer required by FileMaker Pro.
 const (
+	COMMA               = `,`
 	COUNT               = `$count`
 	CROSSJOIN           = `$crossjoin`
+	DEQUOTE             = `dequote`
+	DOUBLE_SINGLE_QUOTE = `''`
+	ESCAPE              = `escape`
 	EXPAND              = `$expand`
 	FILTER              = `$filter`
 	FORMAT              = `$format`
+	LEFT_BRACKET        = `(`
 	NEXTLINK            = `$nextLink`
 	METADATA            = `$metadata`
 	ODATAETAG           = `$odataetag`           // not supported yet. Will facilitate extraction of @odata.etag
@@ -19,9 +24,14 @@ const (
 	ORDERBY             = `$orderby`
 	NOTHING             = ``
 	REF                 = `$ref`
+	RIGHT_BRACKET       = `)`
 	SELECT              = `$select`
+	SINGLE_DOUBLE_QUOTE = `"`
 	SKIP                = `$skip`
+	QUOTE               = `quote`
+	QUOTED              = `quoted`
 	TOP                 = `$top`
 	TRUE                = `true`
+	UNEXPECTED_ERROR    = `unexpected error`
 	VALUE               = `$value`
 )
