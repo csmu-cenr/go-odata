@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -39,7 +40,55 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
 
-	options.Select = values.Get(SELECT)
+	// Determine if the field names should be quoted
+	if values.Has(QUOTED) {
+		options.Quoted = values.Get(QUOTED) == TRUE
+	} else {
+		options.Quoted = true
+	}
+
+	if values.Has(ESCAPE) {
+		options.Escape = values.Get(ESCAPE) == TRUE
+	} else {
+		options.Escape = false
+	}
+
+	// Quote the field names if requested
+	if options.Quoted {
+		options.Select = quoteCommaDelimited(values.Get(SELECT))
+	} else {
+		options.Select = values.Get(SELECT)
+	}
+
+	// Quote any fields in values["quote"]
+	if values.Has(QUOTE) {
+		found := false
+		out := []string{}
+		quote := values[QUOTE]
+		fields := strings.Split(options.Select, COMMA)
+		for _, f := range fields {
+			if isDoubleQuoted(f) {
+				out = append(out, f)
+				continue
+			}
+			found = stringSliceContains(quote, f)
+			if !found {
+				out = append(out, f)
+				continue
+			}
+			out = append(out, fmt.Sprintf(`"%s"`, f))
+		}
+		options.Select = strings.Join(out, COMMA)
+	}
+
+	// Remove quotes from fields that the odata provider rejects.
+	if values.Has(DEQUOTE) {
+		dequote := values[DEQUOTE]
+		for _, v := range dequote {
+			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
+		}
+	}
+
 	options.Count = values.Get(COUNT)
 	options.Top = values.Get(TOP)
 	options.Skip = values.Get(SKIP)
@@ -47,6 +96,7 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 
 	options.Expand = values.Get(EXPAND)
 	options.ODataEditLink = values.Get(ODATAEDITLINK)
+	options.ODataNavigationLink = values.Get(ODATANAVIGATIONLINK)
 	options.ODataEtag = values.Get(ODATAETAG)
 	options.ODataId = values.Get(ODATAID)
 	options.ODataReadLink = values.Get(ODATAREADLINK)
@@ -64,6 +114,13 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		} else {
 			options.Filter = fmt.Sprintf("(%s) and (%s)", defaultFilter, filterValue)
 		}
+	}
+
+	// Quote the filter if options.Quoted
+	if options.Filter != NOTHING && values.Has(QUOTE) {
+		fields := []string{}
+		fields = append(fields, values[QUOTE]...)
+		options.Filter = quoteODataFields(options.Filter, fields)
 	}
 
 	format := values.Get((FORMAT))
@@ -86,48 +143,55 @@ func ConvertInterfaceToBytes(data interface{}) ([]byte, error) {
 }
 
 func (options ODataQueryOptions) ToQueryString() string {
-	queryStrings := url.Values{}
+	values := url.Values{}
 	if options.Select != NOTHING {
-		queryStrings.Add(SELECT, options.Select)
+		values.Add(SELECT, options.Select)
 	}
 	if options.Filter != NOTHING {
-		queryStrings.Add(FILTER, options.Filter)
+		values.Add(FILTER, options.Filter)
 	}
 	if options.Top != NOTHING {
-		queryStrings.Add(TOP, options.Top)
+		values.Add(TOP, options.Top)
 	}
 	if options.Skip != NOTHING {
-		queryStrings.Add(SKIP, options.Skip)
+		values.Add(SKIP, options.Skip)
 	}
 	if options.Count != NOTHING {
-		queryStrings.Add(COUNT, options.Count)
+		values.Add(COUNT, options.Count)
 	}
 	if options.OrderBy != NOTHING {
-		queryStrings.Add(ORDERBY, options.OrderBy)
+		values.Add(ORDERBY, options.OrderBy)
 	}
 	if options.Format != NOTHING {
-		queryStrings.Add(FORMAT, options.Format)
+		values.Add(FORMAT, options.Format)
 	}
 	if options.Expand != NOTHING {
-		queryStrings.Add(EXPAND, options.Expand)
+		values.Add(EXPAND, options.Expand)
 	}
 	if options.ODataEditLink != NOTHING {
-		queryStrings.Add(ODATAEDITLINK, options.ODataEditLink)
+		values.Add(ODATAEDITLINK, options.ODataEditLink)
+	}
+	if options.ODataNavigationLink != NOTHING {
+		values.Add(ODATANAVIGATIONLINK, options.ODataNavigationLink)
 	}
 	if options.ODataId != NOTHING {
-		queryStrings.Add(ODATAID, options.ODataId)
+		values.Add(ODATAID, options.ODataId)
 	}
 	if options.ODataReadLink != NOTHING {
-		queryStrings.Add(ODATAREADLINK, options.ODataReadLink)
+		values.Add(ODATAREADLINK, options.ODataReadLink)
 	}
-	result := queryStrings.Encode()
-	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
+	result := values.Encode()
+	if options.Escape {
+		result = strings.ReplaceAll(result, "%22", `"`) // %22 can stop odata from seeing the field name. swap back to "
+	}
 	result = strings.ReplaceAll(result, "%24", "$") // sometimes %24 is not recognised as $ - make it explicitly $
-	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
-	result = strings.ReplaceAll(result, "%2F", "/") // %3D stops odata from seeing table identifiers swap back to slashes
 	result = strings.ReplaceAll(result, "%28", "(") // %28 can stop odata from seeing bracketed code swap back to (
 	result = strings.ReplaceAll(result, "%29", ")") // %29 can stop odata from seeing bracketed code swap back to )
+	result = strings.ReplaceAll(result, "%2C", ",") // %2C stops odata from seeing the parameters, swap back to commas
+	result = strings.ReplaceAll(result, "%2F", "/") // %2F stops odata from seeing table identifiers swap back to slashes
+	result = strings.ReplaceAll(result, "%3A", ":") // %3A can stop odata from makimg finds against timestamps- swap back to :
 	result = strings.ReplaceAll(result, "%3D", "=") // %3D can stop odata from seeing equal signs swap back to =
+	result = strings.ReplaceAll(result, "+", "%20") // Using + for spaces causes issues - swap out to %20
 	return result
 }
 
@@ -515,4 +579,101 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 	}
 
 	return nil
+}
+
+// isDoubleQuoted checks if the first and last characters of the string are double quotes.
+func isDoubleQuoted(field string) bool {
+	// Must be at least 3 characters long to be quoted
+	if len(field) < 2 {
+		return false
+	}
+
+	// Get the first and last characters
+	first := rune(field[0])
+	last := rune(field[len(field)-1])
+
+	// Return true if both are double quotes
+	return first == '"' && last == '"'
+}
+
+// quoteCommaDelimited turns a comma delimited string into a double quoted comma delimited string.
+// Such that 1,"2",3,4,""5"" is returned as "1","2","3","4","5"
+func quoteCommaDelimited(input string) string {
+	delimiter := `"`
+
+	// Split the string by commas
+	parts := strings.Split(input, ",")
+
+	// Process each part, strip existing quotes and enclose in double quotes
+	for i, part := range parts {
+		part = strings.Trim(part, ` "`) // Remove existing quotes and whitespace
+		parts[i] = fmt.Sprintf(`%s%s%s`, delimiter, part, delimiter)
+	}
+
+	// Join the parts back together with commas
+	return strings.Join(parts, ",")
+}
+
+// quoteODataFields quotes specified field names in standard OData expressions and function calls.
+// 2025-06-18 Added support for functions - Keith John Hutchison
+func quoteODataFields(query string, fields []string) string {
+	if len(fields) == 0 {
+		return query
+	}
+
+	// --- Step 1: Quote field names used with standard operators ---
+	// List of supported OData operators
+	operators := []string{
+		"eq", "ne", "gt", "ge", "lt", "le",
+		"and", "or", "not",
+		"add", "sub", "mul", "div", "mod",
+	}
+
+	// Build regex pattern for fields followed by operators
+	fieldPattern := `\b(` + strings.Join(fields, "|") + `)\b`
+	operatorPattern := strings.Join(operators, "|")
+	regex := regexp.MustCompile(`(?i)(\(?\s*)` + fieldPattern + `(\s+)(` + operatorPattern + `)\b`)
+
+	// Replace matched fields with quoted versions
+	result := regex.ReplaceAllStringFunc(query, func(match string) string {
+		sub := regex.FindStringSubmatch(match)
+		if len(sub) >= 4 {
+			prefix := sub[1]
+			field := sub[2]
+			space := sub[3]
+			operator := sub[4]
+			return fmt.Sprintf("%s\"%s\"%s%s", prefix, field, space, operator)
+		}
+		return match
+	})
+
+	// --- Step 2: Quote field names used in function calls ---
+	// e.g., contains(field, 'value') → contains("field", 'value')
+	funcNames := []string{"startswith", "endswith", "contains", "length", "tolower", "toupper", "trim", "substring"}
+
+	// Build regex to match function calls with the field as first argument
+	funcPattern := `(?i)\b(` + strings.Join(funcNames, "|") + `)\(\s*(` + strings.Join(fields, "|") + `)\s*,`
+
+	funcRegex := regexp.MustCompile(funcPattern)
+	result = funcRegex.ReplaceAllStringFunc(result, func(match string) string {
+		sub := funcRegex.FindStringSubmatch(match)
+		if len(sub) >= 3 {
+			funcName := sub[1]
+			field := sub[2]
+			return fmt.Sprintf(`%s("%s",`, funcName, field)
+		}
+		return match
+	})
+
+	return result
+}
+
+// stringSliceContains checks if a string slice stringSliceContains a specific element
+func stringSliceContains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }
