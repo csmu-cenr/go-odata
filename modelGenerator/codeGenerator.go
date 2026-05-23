@@ -82,16 +82,17 @@ func (g *Generator) validPropertyName(property string) bool {
 func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 
 	publicName := publicAttribute(entityType.Name)
-	structString := fmt.Sprintf("type %s struct {", publicName)
+	var structString strings.Builder
+	structString.WriteString(fmt.Sprintf("type %s struct {", publicName))
 	propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
 
 	jsonSupport := ""
 	name := ""
 
 	for _, extra := range g.Fields.Extras {
-		structString += fmt.Sprintf("\n\t%s", extra)
+		fmt.Fprintf(&structString, "\n\t%s", extra)
 	}
-	structString += "\n"
+	structString.WriteString("\n")
 
 	for _, propertyKey := range propertyKeys {
 		include := g.validPropertyName(propertyKey)
@@ -116,11 +117,11 @@ func (g *Generator) generateModelStruct(entityType edmxEntityType) string {
 			if value, ok := g.Fields.Swap[goType]; ok {
 				goType = value
 			}
-			structString += fmt.Sprintf("\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
+			fmt.Fprintf(&structString, "\n\t%s %s%s\t%s", name, pointer, goType, jsonSupport)
 		}
 	}
 
-	return structString + "\n}"
+	return structString.String() + "\n}"
 }
 
 func generateModelDefinition(set edmxEntitySet) string {
@@ -186,30 +187,34 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	func (e NilModel) Error() string {
 		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
 	}
+		
 	`
 
-	deleteCode := fmt.Sprintf(`package %s
+	var deleteCode strings.Builder
+	deleteCode.WriteString(fmt.Sprintf(`package %s
 	
 	import (
 		"github.com/Uffe-Code/go-odata/odataClient"
 	)
-	`, packageName)
+	`, packageName))
 
-	updateCode := fmt.Sprintf(`package %s
+	var updateCode strings.Builder
+	updateCode.WriteString(fmt.Sprintf(`package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, packageName))
 
-	insertCode := fmt.Sprintf(`package %s
+	var insertCode strings.Builder
+	insertCode.WriteString(fmt.Sprintf(`package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, packageName))
 
-	modelCode := fmt.Sprintf(`package %s
+	baseModelCode := fmt.Sprintf(`package %s
 
 import (
 	"fmt"
@@ -264,21 +269,24 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	selectByTableNameOptions := `options`
 	selectByTableNameCode = strings.ReplaceAll(selectByTableNameCode, "{{options}}", selectByTableNameOptions)
 
-	saveCode := fmt.Sprintf(`package %s
+	var saveCode strings.Builder
+	saveCode.WriteString(fmt.Sprintf(`package %s
 
 
-`, packageName)
+`, packageName))
 
-	datasets := fmt.Sprintf(`
+	var datasets strings.Builder
+	datasets.WriteString(fmt.Sprintf(`
 package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-	`, packageName)
+	`, packageName))
 
-	selectCode := fmt.Sprintf(`
+	var selectCode strings.Builder
+	selectCode.WriteString(fmt.Sprintf(`
 package %s
 
 import (
@@ -288,9 +296,10 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, packageName))
 
-	mapCode := fmt.Sprintf(`package %s
+	var mapCode strings.Builder
+	mapCode.WriteString(fmt.Sprintf(`package %s
 
 import (
 	"fmt"
@@ -300,15 +309,17 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, packageName))
+
+	var singleFileMap map[string]string
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
-			modelCode += "\n" + generateEnumStruct(enum) + "\n"
+			baseModelCode += "\n" + generateEnumStruct(enum) + "\n"
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			modelCode += "\n" + g.generateModelStruct(complexType) + "\n"
+			baseModelCode += "\n" + g.generateModelStruct(complexType) + "\n"
 		}
 
 		var names []string
@@ -319,18 +330,100 @@ import (
 			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
 		})
 
+		if g.OutputMode.IsSingle() {
+			modelBase := fmt.Sprintf(`package %s
+			
+import (
+	"fmt"
+
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/Uffe-Code/go-odata/odataClient"
+	"github.com/Uffe-Code/go-odata/date"
+	
+)
+
+type modelDefinition[T any] struct { client odataClient.ODataClient; name string; url string }
+
+func (md modelDefinition[T]) Name() string {
+	return md.name
+}
+
+func (md modelDefinition[T]) Url() string {
+	return md.url
+}
+
+func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.ODataModelDefinition[T]] {
+	return odataClient.NewDataSet[T](md.client, md)
+}
+
+%s
+
+`, packageName, nilModel)
+
+			base := fmt.Sprintf(`package %s
+			
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/Uffe-Code/go-odata/odataClient"
+)
+
+		`, packageName)
+			singleFileMap = map[string]string{}
+			singleFileMap[`modelDefinition`] = modelBase
+			for _, name := range names {
+				singleFileMap[name] = base
+			}
+		}
+
 		for _, name := range names {
 			set := schema.EntitySets[name]
-			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
-			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
+			modelCode := ``
+			if g.OutputMode.IsSingle() {
+				modelCode, _ = singleFileMap[name]
+				modelCode += g.generateModelStruct(set.getEntityType()) + "\n"
+				modelCode += "\n" + generateModelDefinition(set) + "\n"
+				mapCode.Reset()
+				selectCode.Reset()
+				datasets.Reset()
+				updateCode.Reset()
+				insertCode.Reset()
+				saveCode.Reset()
+				deleteCode.Reset()
+			}
+			if g.OutputMode.IsOmnibus() {
+				baseModelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
+				baseModelCode += "\n" + generateModelDefinition(set) + "\n"
+			}
+			mapCode.WriteString("\n" + generateMapFunctionCode(set) + "\n")
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
-			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
-			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
-			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
-			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
-			saveCode += "\n" + generateSaveCode(set) + "\n"
-			deleteCode += "\n" + generatDeleteCode(set, "client", "odataClient") + "\n"
+			selectCode.WriteString("\n" + generateSelectCode(set, "client", "odataClient") + "\n")
+			datasets.WriteString("\n" + generateDataSet(set, "client", "odataClient") + "\n")
+			updateCode.WriteString("\n" + generateUpdateCode(set, "client", "odataClient") + "\n")
+			insertCode.WriteString("\n" + generateInsertCode(set, "client", "odataClient") + "\n")
+			saveCode.WriteString("\n" + generateSaveCode(set) + "\n")
+			deleteCode.WriteString("\n" + generatDeleteCode(set, "client", "odataClient") + "\n")
+			if g.OutputMode.IsSingle() {
+				sections := []string{
+					datasets.String(),
+					deleteCode.String(),
+					insertCode.String(),
+					mapCode.String(),
+					saveCode.String(),
+					selectCode.String(),
+					updateCode.String(),
+				}
+				for _, section := range sections {
+					if strings.TrimSpace(section) == "" {
+						continue
+					}
+					modelCode += "\n\n" + strings.TrimSpace(section)
+				}
+				singleFileMap[name] = modelCode
+			}
 		}
 	}
 
@@ -338,36 +431,45 @@ import (
 	default:
 		return nil, nil
 	}
-	return nil, nil
 }
 	`
-	if g.Package.Models != NOTHING {
-		code[g.Package.Models] = modelCode
-	}
+
 	if g.Package.SelectByTableName != NOTHING {
 		code[g.Package.SelectByTableName] = selectByTableNameCode
 	}
-	if g.Package.Select != NOTHING {
-		code[g.Package.Select] = selectCode
+	if g.OutputMode.IsOmnibus() {
+		if g.Package.Models != NOTHING {
+			code[g.Package.Models] = baseModelCode
+		}
+		if g.Package.Select != NOTHING {
+			code[g.Package.Select] = selectCode.String()
+		}
+		if g.Package.Datasets != NOTHING {
+			code[g.Package.Datasets] = datasets.String()
+		}
+		if g.Package.Maps != NOTHING {
+			code[g.Package.Maps] = mapCode.String()
+		}
+		if g.Package.Update != NOTHING {
+			code[g.Package.Update] = updateCode.String()
+		}
+		if g.Package.Insert != NOTHING {
+			code[g.Package.Insert] = insertCode.String()
+		}
+		if g.Package.Save != NOTHING {
+			code[g.Package.Save] = saveCode.String()
+		}
+		if g.Package.Delete != NOTHING {
+			code[g.Package.Delete] = deleteCode.String()
+		}
 	}
-	if g.Package.Datasets != NOTHING {
-		code[g.Package.Datasets] = datasets
+
+	if g.OutputMode.IsSingle() {
+		for name, contents := range singleFileMap {
+			code[fmt.Sprintf(`%s.go`, name)] = contents
+		}
 	}
-	if g.Package.Maps != NOTHING {
-		code[g.Package.Maps] = mapCode
-	}
-	if g.Package.Update != NOTHING {
-		code[g.Package.Update] = updateCode
-	}
-	if g.Package.Insert != NOTHING {
-		code[g.Package.Insert] = insertCode
-	}
-	if g.Package.Save != NOTHING {
-		code[g.Package.Save] = saveCode
-	}
-	if g.Package.Delete != NOTHING {
-		code[g.Package.Delete] = deleteCode
-	}
+
 	packageLine := fmt.Sprintf("package %s", packageName)
 
 	files, err := os.ReadDir(g.Package.Extras)
