@@ -1,12 +1,13 @@
 .PHONY: clean default version build run
-FILES := /usr/local/bin/go-odata
+APP := go-odata-v1
+FILES := /usr/local/bin/$(APP)
 
 default: version run
-	
+
 build:
-	@echo "Building 'go-odata' with 'go build'"
-	@go build
-	
+	@echo "Building '$(APP)' with 'go build'"
+	@go build -o $(APP)
+
 clean:
 	@for file in $(FILES); do \
 		if [ -e "$$file" ]; then \
@@ -18,13 +19,13 @@ clean:
 	done
 
 copy:
-	@echo "Copying go-data to /usr/local/bin/..."
-	@cp go-odata /usr/local/bin/
-	
+	@echo "Copying $(APP) to /usr/local/bin/..."
+	@cp $(APP) /usr/local/bin/
+
 finished:
 	@echo "Finished."
 
-install: starting build clean copy finished
+install: starting build clean copy remove finished
 
 push:
 	@echo "Pushing to repository using 'git push'"
@@ -33,14 +34,16 @@ push:
 	@git push origin --tags
 
 run:
-	@echo "Generating code with './go-odata config.json'"
-	@./go-odata config.json		
+	@echo "Generating code with './$(APP) config.json'"
+	@./$(APP) config.json
+
+remove:
+	@echo "Removing local $(APP)"
+	@rm $(APP)
 
 starting:
 	@echo "Starting."
-	
+
 version:
 	@echo "Showing versions using 'git tag -n1'"
 	@git tag -n1
-	
-	
