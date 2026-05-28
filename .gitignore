@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-go-odata
+go-odata*
 
 # Test binary, built with `go test -c`
 *.test
