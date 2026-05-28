@@ -17,17 +17,17 @@ type oDataClient struct {
 }
 
 type ErrorMessage struct {
-	Message    string             `json:"message,omitempty"`
-	Code       string             `json:"code"`
-	ErrorNo    int                `json:"errorNo"`
-	Function   string             `json:"function,omitempty"`
 	Attempted  string             `json:"attempted,omitempty"`
 	Body       interface{}        `json:"body,omitempty"`
+	Code       string             `json:"code"`
 	Details    interface{}        `json:"details,omitempty"`
+	ErrorNo    int                `json:"errorNo"`
+	Exit       string             `json:"exit"`
+	Function   string             `json:"function,omitempty"`
+	InnerError interface{}        `json:"err,omitempty"`
+	Message    string             `json:"message,omitempty"`
 	Options    *ODataQueryOptions `json:"options,omitempty"`
 	Payload    interface{}        `json:"payload"`
-	InnerError interface{}        `json:"err,omitempty"`
-	Exit       int                `json:"exit"`
 	RequestUrl string             `json:"requestUrl,omitempty"`
 }
 

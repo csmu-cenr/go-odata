@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Uffe-Code/go-odata/modelgeneratoroutput"
 )
 
 type ModelGeneratorError struct {
@@ -60,6 +62,7 @@ type Generator struct {
 			Equals     []string `json:"equals"`
 		} `json:"ignore"`
 	} `json:"fields"`
+	OutputMode modelgeneratoroutput.OutputMode `json:"outputMode"`
 }
 
 func New(path string) (Generator, error) {

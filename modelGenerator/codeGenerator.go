@@ -57,14 +57,20 @@ func New%sCollection(wrapper odataClient.Wrapper) odataClient.ODataModelCollecti
 func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxDataServices) map[string]string {
 
 	code := map[string]string{}
+	var singleFileMap map[string]string
 
-	customErrors := `
-	
+	nilModel := `
 	type NilModel struct {
 		Model  string
 		Filter string
 	}
-	
+		
+	func (e NilModel) Error() string {
+		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
+	}
+	`
+
+	recordIsOutOfDate := `
 	type RecordIsOutOfDate struct {
 		Model  string      
 		Uuid   string      
@@ -72,29 +78,33 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 		Record interface{} 
 	}
 
-	func (e NilModel) Error() string {
-		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
-	}
-
 	func (r RecordIsOutOfDate) Error() string {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return err.Error()
+		data, err := json.Marshal(r)
+		if err != nil {
+			return err.Error()
+		}
+		return string(data)
 	}
-	return string(data)
-}
-
-
 	`
 
-	deleteCode := fmt.Sprintf(`package %s
+	customErrors := fmt.Sprintf(`
+		%s
+		%s
+		`,
+		nilModel,
+		recordIsOutOfDate,
+	)
+
+	var deleteCode strings.Builder
+	deleteCode.WriteString(fmt.Sprintf(`package %s
 	
 	import (
 		"github.com/Uffe-Code/go-odata/odataClient"
 	)
-	`, packageName)
+	`, packageName))
 
-	updateCode := fmt.Sprintf(`package %s
+	var updateCode strings.Builder
+	updateCode.WriteString(fmt.Sprintf(`package %s
 	
 import (
 	"fmt"
@@ -106,9 +116,10 @@ import (
 	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, packageName))
 
-	insertCode := fmt.Sprintf(`package %s
+	var insertCode strings.Builder
+	insertCode.WriteString(fmt.Sprintf(`package %s
 	
 import (
 	"fmt"
@@ -118,9 +129,9 @@ import (
 	"github.com/Uffe-Code/go-nullable/nullable"
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName)
+`, packageName))
 
-	modelCode := fmt.Sprintf(`package %s
+	baseModelCode := fmt.Sprintf(`package %s
 
 import (
 	"encoding/json"
@@ -176,7 +187,8 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	selectByTableNameOptions := `options`
 	selectByTableNameCode = strings.ReplaceAll(selectByTableNameCode, "{{options}}", selectByTableNameOptions)
 
-	saveCode := fmt.Sprintf(`package %s
+	var saveCode strings.Builder
+	saveCode.WriteString(fmt.Sprintf(`package %s
 
 	import (
 		"encoding/json"
@@ -188,18 +200,20 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 		"github.com/Uffe-Code/go-nullable/nullable"
 	)
 
-`, packageName)
+`, packageName))
 
-	datasets := fmt.Sprintf(`
+	var datasets strings.Builder
+	datasets.WriteString(fmt.Sprintf(`
 package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-	`, packageName)
+	`, packageName))
 
-	selectCode := fmt.Sprintf(`
+	var selectCode strings.Builder
+	selectCode.WriteString(fmt.Sprintf(`
 package %s
 
 import (
@@ -212,9 +226,10 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, packageName))
 
-	mapCode := fmt.Sprintf(`package %s
+	var mapCode strings.Builder
+	mapCode.WriteString(fmt.Sprintf(`package %s
 
 import (
 	"fmt"
@@ -224,15 +239,15 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName)
+`, packageName))
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
-			modelCode += "\n" + generateEnumStruct(enum) + "\n"
+			baseModelCode += "\n" + generateEnumStruct(enum) + "\n"
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			modelCode += "\n" + g.generateModelStruct(complexType) + "\n"
+			baseModelCode += "\n" + g.generateModelStruct(complexType) + "\n"
 		}
 
 		var names []string
@@ -243,18 +258,110 @@ import (
 			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
 		})
 
+		if g.OutputMode.IsSingle() {
+			modelBase := fmt.Sprintf(`package %s
+			
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/Uffe-Code/go-odata/odataClient"
+	"github.com/Uffe-Code/go-odata/date"
+	
+)
+
+%s
+
+`, packageName, customErrors)
+
+			base := fmt.Sprintf(`package %s
+			
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"reflect"
+	"strings"
+
+	"github.com/Uffe-Code/go-nullable/nullable"
+	"github.com/Uffe-Code/go-odata/odataClient"
+	"github.com/Uffe-Code/go-odata/date"
+)
+
+		`, packageName)
+			singleFileMap = map[string]string{}
+			singleFileMap[`modelDefinition`] = modelBase
+			for _, name := range names {
+				singleFileMap[name] = base
+			}
+		}
+
 		for _, name := range names {
 			set := schema.EntitySets[name]
-			datasets += "\n" + generateDataSet(set, "client", "odataClient") + "\n"
-			deleteCode += "\n" + generateDeleteCode(set, "client", "odataClient") + "\n"
-			insertCode += "\n" + generateInsertCode(set, "client", "odataClient") + "\n"
-			mapCode += "\n" + generateMapFunctionCode(set) + "\n"
-			modelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
-			modelCode += "\n" + generateModelDefinition(set) + "\n"
-			saveCode += "\n" + generateSaveCode(set) + "\n"
+			modelCode := ``
+			if g.OutputMode.IsSingle() {
+				modelCode, _ = singleFileMap[name]
+				modelCode += g.generateModelStruct(set.getEntityType()) + "\n"
+				modelCode += "\n" + generateModelDefinition(set) + "\n"
+
+				// Reset builders for each entity in single mode to avoid accumulation
+				mapCode.Reset()
+				selectCode.Reset()
+				datasets.Reset()
+				updateCode.Reset()
+				insertCode.Reset()
+				saveCode.Reset()
+				deleteCode.Reset()
+			}
+			if g.OutputMode.IsOmnibus() {
+				baseModelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
+				baseModelCode += "\n" + generateModelDefinition(set) + "\n"
+			}
+			mapCode.WriteString("\n" + generateMapFunctionCode(set) + "\n")
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
-			selectCode += "\n" + generateSelectCode(set, "client", "odataClient") + "\n"
-			updateCode += "\n" + generateUpdateCode(set, "client", "odataClient") + "\n"
+			selectCode.WriteString("\n" + generateSelectCode(set, "client", "odataClient") + "\n")
+			datasets.WriteString("\n" + generateDataSet(set, "client", "odataClient") + "\n")
+			updateCode.WriteString("\n" + generateUpdateCode(set, "client", "odataClient") + "\n")
+			insertCode.WriteString("\n" + generateInsertCode(set, "client", "odataClient") + "\n")
+			saveCode.WriteString("\n" + generateSaveCode(set) + "\n")
+			deleteCode.WriteString("\n" + generateDeleteCode(set, "client", "odataClient") + "\n")
+			if g.OutputMode.IsSingle() {
+				sections := []string{
+					datasets.String(),
+					deleteCode.String(),
+					insertCode.String(),
+					mapCode.String(),
+					saveCode.String(),
+					selectCode.String(),
+					updateCode.String(),
+				}
+				for _, section := range sections {
+					if strings.TrimSpace(section) == "" {
+						continue
+					}
+					// Remove package and import lines from sections before appending
+					lines := strings.Split(section, "\n")
+					var filteredLines []string
+					for _, line := range lines {
+						trimmed := strings.TrimSpace(line)
+						if strings.HasPrefix(trimmed, "package ") || strings.HasPrefix(trimmed, "import (") || strings.HasPrefix(trimmed, ")") || trimmed == "" {
+							// Basic heuristic to skip imports in single mode sections
+							// This is a bit fragile but matches the current structure
+							if strings.Contains(trimmed, "\"") && (strings.Contains(trimmed, "github.com") || strings.Contains(trimmed, "net/") || strings.Contains(trimmed, "fmt") || strings.Contains(trimmed, "reflect")) {
+								continue
+							}
+							if trimmed == ")" || trimmed == "import (" || strings.HasPrefix(trimmed, "package ") {
+								continue
+							}
+						}
+						filteredLines = append(filteredLines, line)
+					}
+					modelCode += "\n\n" + strings.Join(filteredLines, "\n")
+				}
+				singleFileMap[name] = modelCode
+			}
 		}
 	}
 
@@ -262,36 +369,43 @@ import (
 	default:
 		return nil, nil
 	}
-	return nil, nil
 }
 	`
-	if g.Package.Models != "" {
-		code[g.Package.Models] = modelCode
-	}
 	if g.Package.SelectByTableName != "" {
 		code[g.Package.SelectByTableName] = selectByTableNameCode
 	}
-	if g.Package.Select != "" {
-		code[g.Package.Select] = selectCode
+	if g.OutputMode.IsOmnibus() {
+		if g.Package.Models != "" {
+			code[g.Package.Models] = baseModelCode
+		}
+		if g.Package.Select != "" {
+			code[g.Package.Select] = selectCode.String()
+		}
+		if g.Package.Datasets != "" {
+			code[g.Package.Datasets] = datasets.String()
+		}
+		if g.Package.Maps != "" {
+			code[g.Package.Maps] = mapCode.String()
+		}
+		if g.Package.Update != "" {
+			code[g.Package.Update] = updateCode.String()
+		}
+		if g.Package.Insert != "" {
+			code[g.Package.Insert] = insertCode.String()
+		}
+		if g.Package.Save != "" {
+			code[g.Package.Save] = saveCode.String()
+		}
+		if g.Package.Delete != "" {
+			code[g.Package.Delete] = deleteCode.String()
+		}
 	}
-	if g.Package.Datasets != "" {
-		code[g.Package.Datasets] = datasets
+	if g.OutputMode.IsSingle() {
+		for name, contents := range singleFileMap {
+			code[fmt.Sprintf(`%s.go`, name)] = contents
+		}
 	}
-	if g.Package.Maps != "" {
-		code[g.Package.Maps] = mapCode
-	}
-	if g.Package.Update != "" {
-		code[g.Package.Update] = updateCode
-	}
-	if g.Package.Insert != "" {
-		code[g.Package.Insert] = insertCode
-	}
-	if g.Package.Save != "" {
-		code[g.Package.Save] = saveCode
-	}
-	if g.Package.Delete != "" {
-		code[g.Package.Delete] = deleteCode
-	}
+
 	packageLine := fmt.Sprintf("package %s", packageName)
 
 	files, err := os.ReadDir(g.Package.Extras)
