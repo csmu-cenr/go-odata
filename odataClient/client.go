@@ -29,6 +29,7 @@ type ErrorMessage struct {
 	Options    *ODataQueryOptions `json:"options,omitempty"`
 	Payload    interface{}        `json:"payload"`
 	RequestUrl string             `json:"requestUrl,omitempty"`
+	Stack      []string           `json:"stack,omitempty"`
 }
 
 func (e ErrorMessage) Error() string {
@@ -82,7 +83,7 @@ type ODataQueryOptions struct {
 	ODataEtag           string `json:"odataEtag,omitempty"`
 	ODataId             string `json:"odataId,omitempty"`
 	ODataReadLink       string `json:"odataReadLink,omitempty"`
-	TimeOut             int    `json:"timeOut"`
+	TimeOutSeconds      int    `json:"timeOut"`
 }
 
 func (options *ODataQueryOptions) Fields() []string {
