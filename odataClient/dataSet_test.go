@@ -13,21 +13,11 @@ import (
 )
 
 type testModel struct {
-	// <<<<<<< HEAD
 	Id          int                       `json:"Id"`
 	Number      string                    `json:"Number"`
 	Name        string                    `json:"Name"`
 	ParentId    nullable.Nullable[int]    `json:"ParentId"`
 	Description nullable.Nullable[string] `json:"Description"`
-	// =======
-	//
-	//	Id          int                       `json:"id"`
-	//	Number      string                    `json:"number"`
-	//	Name        string                    `json:"name"`
-	//	ParentId    nullable.Nullable[int]    `json:"parentId"`
-	//	Description nullable.Nullable[string] `json:"description"`
-	//
-	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
 }
 
 type testModelDefinition[T any] struct {
@@ -90,8 +80,8 @@ func TestOdataDataSet_Single(t *testing.T) {
 	assert.Equal(t, 5, model.Id)
 	assert.Equal(t, "002", model.Number)
 	assert.Equal(t, "Donald Duck", model.Name)
-	assert.False(t, model.ParentId.IsValid)
-	assert.True(t, model.Description.IsValid)
+	assert.False(t, model.ParentId.IsNotZero())
+	assert.True(t, model.Description.IsNotEmpty())
 	assert.Equal(t, "Test description", model.Description.Data)
 }
 
@@ -129,11 +119,7 @@ func TestOdataDataSet_List(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	//<<<<<<< HEAD
 	metaChan, modelsChan, errsChan := dataSet.List(ODataQueryOptions{})
-	// =======
-	// 	_, models, _ := dataSet.List(ODataQueryOptions{})
-	// >>>>>>> 7c6bdcb63824bc3e6b694151b7713b7b7c34ddd6
 
 	var models []testModel
 	done := make(chan bool)
@@ -195,7 +181,7 @@ func Test_Insert(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
-	assert.False(t, res.ParentId.IsValid)
+	assert.False(t, res.ParentId.IsNotEmpty())
 	assert.Equal(t, "FooBar", res.Name)
 }
 
@@ -246,6 +232,6 @@ func Test_Update(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 5, res.Id)
 	assert.Equal(t, "1234", res.Number)
-	assert.False(t, res.ParentId.IsValid)
+	assert.False(t, res.ParentId.IsNotEmpty())
 	assert.Equal(t, "FooBar", res.Name)
 }
