@@ -2,7 +2,6 @@ package dataModel
 
 import (
 	"fmt"
-	"net/http"
 	"reflect"
 	"strings"
 	"unicode"
@@ -167,80 +166,4 @@ func StructJsonTags(data interface{}) ([]string, error) {
 	}
 	return results, nil
 
-}
-
-// StructToMap
-// Move/cop to nullable
-func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
-
-	function := `dmdata.StructToMap`
-
-	result := map[string]interface{}{}
-
-	if data == nil {
-		m := ErrorMessage{
-			Details:  `data cannot be nil`,
-			ErrorNo:  http.StatusBadRequest,
-			Function: function,
-			Message:  "bad request",
-		}
-		return result, m
-	}
-
-	// Dereference pointers if necessary
-	check := reflect.ValueOf(data)
-	if check.Kind() == reflect.Ptr && !check.IsNil() {
-		check = check.Elem()
-		data = check
-	}
-
-	// Get the type and value of the input data
-	dataType := reflect.TypeOf(data)
-	dataValue := reflect.ValueOf(data)
-
-	// Ensure the input is a struct
-	if dataType.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("input is not a struct")
-	}
-
-	// If fields is empty, map all fields in the struct
-	if len(fields) == 0 {
-		for i := 0; i < dataType.NumField(); i++ {
-			field := dataType.Field(i)
-			if isFirstLetterCapital(field.Name) {
-				fieldValue := dataValue.Field(i).Interface()
-				jsonTag := field.Tag.Get("json")
-				if jsonTag == "" {
-					jsonTag = field.Name
-				} else {
-					jsonTag = strings.Split(jsonTag, ",")[0]
-				}
-				result[jsonTag] = fieldValue
-			}
-		}
-		return result, nil
-	}
-
-	// Iterate over the fields to be selected
-	for _, fieldName := range fields {
-		// Find the field by JSON tag
-		field, found := findFieldByJSONTag(dataType, fieldName)
-		if !found {
-			// Ignore fields not found in the struct
-			continue
-		}
-
-		// field names must be exported to access the value
-		if isFirstLetterCapital(field.Name) {
-			// Get the field value
-			fieldValue := dataValue.FieldByName(field.Name).Interface()
-
-			// Add the field and value to the result map
-			result[fieldName] = fieldValue
-		} else {
-			result[fieldName] = nil
-		}
-	}
-
-	return result, nil
 }
