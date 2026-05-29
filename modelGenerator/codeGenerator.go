@@ -269,7 +269,23 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 	"github.com/Uffe-Code/go-odata/date"
 	
+
+
 )
+
+	type modelDefinition[T any] struct { client odataClient.ODataClient; name string; url string }
+
+	func (md modelDefinition[T]) Name() string {
+		return md.name
+	}
+
+	func (md modelDefinition[T]) Url() string {
+		return md.url
+	}
+
+	func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.ODataModelDefinition[T]] {
+		return odataClient.NewDataSet[T](md.client, md)
+	}
 
 %s
 
@@ -779,7 +795,7 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		if urlValues.Get(ODATAEDITLINK) == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
-		model, err := {{publicName}}SelectSingle(defaultFilter, values, headers, link)
+		model, err := {{publicName}}Node(defaultFilter, values, headers, link)
 		if err != nil {
 			return make(map[string]interface{}), err
 		}
@@ -811,7 +827,7 @@ func generateMapFunctionCode(set edmxEntitySet) string {
 		if urlValues.Get(ODATAEDITLINK) == "true" {
 			fields = append(fields, "@odata.editLink")
 		}
-		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+		models, err := {{publicName}}Set(defaultFilter, values, headers, link)
 		if err != nil {
 			return make([]map[string]interface{}, 0), err
 		}
@@ -936,6 +952,9 @@ func ({{type}} *{{publicName}}) GetModifiedTags() []string {
 	return nullable.GetModifiedTags({{type}})
 }
 
+func ({{type}} *{{publicName}}) GetSelectedTags() []string {
+	return nullable.GetSelectedTags({{type}}, false)
+}
 
 func ({{type}} *{{publicName}}) Mapped() (map[string]interface{}, error) {
 	tags := nullable.GetSelectedTags({{type}},false)
@@ -1036,8 +1055,8 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return nil
 	}
 
-	func {{publicName}}SelectSingle(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
-		models, err := {{publicName}}SelectList(defaultFilter, values, headers, link)
+	func {{publicName}}Node(defaultFilter string, values url.Values, headers map[string]string, link string) ({{publicName}}, error) {
+		models, err := {{publicName}}Set(defaultFilter, values, headers, link)
 		if err != nil {
 			return {{publicName}}{}, err
 		}
@@ -1051,7 +1070,7 @@ func generateSelectCode(set edmxEntitySet, client string, packageName string) st
 		return models[0], nil
 	}
 	
-	func {{publicName}}SelectList(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
+	func {{publicName}}Set(defaultFilter string, values url.Values, headers map[string]string, link string) ([]{{publicName}}, error) {
 
 		{{client}} := {{packageName}}.New(link)
 		for key, value := range headers {
