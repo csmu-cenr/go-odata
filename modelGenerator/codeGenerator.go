@@ -224,7 +224,13 @@ func (md modelDefinition[T]) DataSet() {{g.Package.OdataAlias}}.ODataDataSet[T, 
 	)
 	
 
-	func SaveByTableName(tableName string, defaultFilter string, values url.Values, headers map[string]string, link string, data []byte) (results map[string][]map[string]any, messages []error) {
+	func SaveByTableName(
+		tableName string, 
+		defaultFilter string, 
+		values url.Values, 
+		headers map[string]string, 
+		link string, 
+		data []byte) (results map[string][]map[string]any, messages []error) {
 
 		client := {{g.Package.OdataAlias}}.New(link)
 		for key, value := range headers {
@@ -326,7 +332,7 @@ import (
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			modelCode += "\n" + g.generateModelStruct(complexType, map[string]string{}, map[string]string{}, map[string]string{}) + "\n"
+			modelCode += "\n" + g.generateModelStruct(complexType, map[string]string{}) + "\n"
 		}
 
 		var names []string
@@ -391,11 +397,11 @@ import (
 			if generateModelStruct {
 				if !modelStruct.Ignore {
 					g.DebugFunction = &modelStruct
-					result := g.generateModelStruct(set.getEntityType(), map[string]string{}, map[string]string{}, map[string]string{})
+					result := g.generateModelStruct(set.getEntityType(), map[string]string{})
 					fmt.Printf("\n\n%s\n\n", result)
 				}
 			}
-			modelCode += "\n" + g.generateModelStruct(set.getEntityType(), fieldsMap, map[string]string{}, map[string]string{}) + "\n"
+			modelCode += "\n" + g.generateModelStruct(set.getEntityType(), fieldsMap) + "\n"
 			modelCode += "\n" + g.ModelDefinition(set) + "\n"
 			saveCode += "\n" + g.SaveCode(set, fieldsMap) + "\n"
 			selectByTableName += "\n" + g.SelectByTableName(set, selectByTableNameOptions) + "\n"
@@ -544,7 +550,7 @@ const (`, enum.Name, goType)
 	return goString + "\n)"
 }
 
-func (g *Generator) generateModelStruct(entityType edmxEntityType, primariesMap, creationsMap, modificationsMap map[string]string) string {
+func (g *Generator) generateModelStruct(entityType edmxEntityType, primariesMap map[string]string) string {
 
 	publicName := publicAttribute(entityType.Name)
 	structString := fmt.Sprintf("type %s struct {", publicName)

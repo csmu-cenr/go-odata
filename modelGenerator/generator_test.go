@@ -23,7 +23,7 @@ func Test_Generate_struct(t *testing.T) {
 	LastName nullable.Nullable[string]
 	MiddleName nullable.Nullable[string]
 	UserName string
-}`, g.generateModelStruct(peopleSet.getEntityType(), map[string]string{}, map[string]string{}, map[string]string{}))
+}`, g.generateModelStruct(peopleSet.getEntityType(), map[string]string{}))
 }
 
 func Test_Generate_enum(t *testing.T) {

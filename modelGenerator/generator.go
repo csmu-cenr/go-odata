@@ -14,14 +14,6 @@ type ErrorMessage struct {
 	Function  string `json:"function" xml:"function"`
 }
 
-func (e ErrorMessage) Error() string {
-	bytes, err := json.Marshal(e)
-	if err != nil {
-		return err.Error()
-	}
-	return string(bytes)
-}
-
 type Fields struct {
 	Extras       []string          `json:"extras"`
 	Ignore       Ignore            `json:"ignore"`
@@ -120,6 +112,14 @@ type Package struct {
 	Update                   string `json:"update"`
 	UpdateWhere              string `json:"updateWhere"`
 	WrapCollections          bool   `json:"wrapCollections"`
+}
+
+func (e ErrorMessage) Error() string {
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		return err.Error()
+	}
+	return string(bytes)
 }
 
 func New(path string) (Generator, error) {

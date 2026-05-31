@@ -63,10 +63,10 @@ type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
 	modelDefinition ODataModelDefinition[ModelT]
 }
 
-type odataMultiDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
-	client          *oDataClient
-	modelDefinition ODataModelDefinition[ModelT]
-}
+// type odataMultiDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
+// 	client          *oDataClient
+// 	modelDefinition ODataModelDefinition[ModelT]
+// }
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, v url.Values) ODataQueryOptions {
 
