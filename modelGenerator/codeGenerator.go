@@ -31,8 +31,8 @@ func (g *Generator) CodeFromSchema(dataService edmxDataServices) map[string]stri
 		Filter 	string
 	}
 
-	func (e NilModel) Error() string {
-		return fmt.Sprintf(" No matching %s found for %s.", e.Model, e.Filter)
+	func (nm NilModel) Error() string {
+		return fmt.Sprintf(" No matching %s found for %s.", nm.Model, nm.Filter)
 	}
 
 	`
@@ -863,6 +863,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 				User:       nil,
 			}
 			ee.RequestUrl = ""
+			_ = ee.RequestUrl
 			return dereferenced, m
 		}
 	} else {
@@ -890,6 +891,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 				User:       nil,
 			}
 			ee.RequestUrl = ""
+			_ = ee.RequestUrl
 			return dereferenced, m
 		}
 		existing = append(existing, node)
@@ -898,59 +900,44 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 	if len(existing) > 0 {
 
 		// will only be one
-		for _, e := range existing {
+		for _, found := range existing {
 
 			if {{type}}.ODataEditLink == "" {
-				{{type}}.ODataEditLink = e.ODataEditLink
+				{{type}}.ODataEditLink = found.ODataEditLink
 			}
 	
-			if {{type}}.ODataEditLink != e.ODataEditLink {
+			if {{type}}.ODataEditLink != found.ODataEditLink {
 				message := UNEXPECTED_ERROR
 				m := ErrorMessage{
-					Attempted:     "",
-					Details:       fmt.Sprintf("{{type}}.ODataEditLink: '%s' != e.ODataEditLink: '%s'", {{type}}.ODataEditLink, e.ODataEditLink ),
+					Details:       fmt.Sprintf("{{type}}.ODataEditLink: '%s' != found.ODataEditLink: '%s'", {{type}}.ODataEditLink, found.ODataEditLink ),
 					ErrorNo:       http.StatusInternalServerError,
 					Exit:          "{{exit04}}",
-					FileName:      "",
 					Function:      function,
-					InnerError:    nil, // no err in scope here
-					IPAddress:     "",
-					LineNumber:    0,
-					Link:          "",
 					Message:       message,
-					Payload:       nil,
-					RequestUrl:    "",
-					User:          nil,
-					UnixTimestamp: time.Now().Unix(),
+
 				}
 				return dereferenced, m
 			}
 	
 			different, err := nullable.LeftIsDifferentFromRightIgnoring(
 				reflect.ValueOf({{type}}),
-				reflect.ValueOf(e),
+				reflect.ValueOf(found),
 				consider,
 				icm,
 			)
 			if err != nil {
 				ee := ExtractError(err)
-				message := UNEXPECTED_ERROR
+				message := http.StatusText(ee.ErrorNo)
 				if s, ok := ee.Message.(string); ok {
 					message = s
 				}
 				m := ErrorMessage{
-					Attempted:  "nullable.LeftIsDifferentFromRight",
+					Code:       ee.Code,
 					Details:    ee.Details,
 					ErrorNo:    ee.ErrorNo,
 					Exit:       "{{exit05}}",
-					FileName:   ee.FileName,
 					Function:   function,
-					InnerError: err,
-					LineNumber: ee.LineNumber,
 					Message:    message,
-					Payload:    nil,
-					RequestUrl: "",
-					User:       nil,
 				}
 				return dereferenced, m
 			}
@@ -966,7 +953,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 	
 				modify, err := nullable.LeftIsDifferentFromRightIgnoring(
 					reflect.ValueOf({{type}}),
-					reflect.ValueOf(e),
+					reflect.ValueOf(found),
 					cm,
 					di,
 				)
@@ -982,16 +969,11 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 						Details:    ee.Details,
 						ErrorNo:    ee.ErrorNo,
 						Exit:       "{{exit06}}",
-						FileName:   ee.FileName,
 						Function:   function,
-						InnerError: err,
-						LineNumber: ee.LineNumber,
 						Message:    message,
-						Payload:    nil,
-						RequestUrl: ee.RequestUrl,
-						User:       nil,
 					}
 					ee.RequestUrl = ""
+					_ = ee.RequestUrl
 					return dereferenced, m
 				}
 	
@@ -1000,7 +982,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 
 				if err := nullable.SetLeftModified(
 					reflect.ValueOf({{type}}),
-					reflect.ValueOf(e),
+					reflect.ValueOf(found),
 					modify,
 				); err != nil {
 					ee := ExtractError(err)
@@ -1023,6 +1005,7 @@ func ({{type}} *{{publicName}}) Save(headers map[string]string, link string, val
 						User:       nil,
 					}
 					ee.RequestUrl = ""
+					_ = ee.RequestUrl
 					return dereferenced, m
 				}
 			} else {
@@ -1090,6 +1073,7 @@ func (alias {{publicName}}Alias) SaveAll(headers map[string]string, link string)
 				User: 			nil,
 			}
 			ee.RequestUrl = ""
+			_ = ee.RequestUrl
 			errs = append( errs, m)
 		}
 		result = append(result, {{type}})
@@ -1307,26 +1291,22 @@ func ({{type}} {{publicName}}) Retrieve(headers map[string]string, link string, 
 
 		retrieved, err = {{publicName}}Node(values.Get(DEFAULT_FILTER), values, headers, link)
 		if err != nil {
-			e := ExtractError(err)
+			ee := ExtractError(err)
 			message := UNEXPECTED_ERROR
-			s, ok := e.Message.(string)
+			s, ok := ee.Message.(string)
 			if ok {
 				message = s
 			}
 			m := ErrorMessage{
 				Attempted:  "{{publicName}}Node",
-				Code:       e.Code,
-				Details:    e.Details,
-				ErrorNo:    e.ErrorNo,
+				Code:       ee.Code,
+				Details:    ee.Details,
+				ErrorNo:    ee.ErrorNo,
 				Exit:       "{{exit17}}",
-				FileName:   e.FileName,
 				Function:   function,
-				InnerError: err,
-				LineNumber: e.LineNumber,
 				Message:    message,
 				Payload:    guardFilter,
-				RequestUrl: e.RequestUrl,
-				User:       nil,
+
 			}
 			return {{publicName}}{}, m
 		}
@@ -1508,6 +1488,7 @@ func (g Generator) SaveByTableName(set edmxEntitySet) string {
 					UnixTimestamp: time.Now().Unix(),
 				}
 				ee.RequestUrl = ""
+				_ = ee.RequestUrl
 				messages = append(messages, m)
 				continue
 			}
@@ -1655,6 +1636,7 @@ func (g Generator) SelectCode(set edmxEntitySet) string {
 				User: 			nil,
 			}
 			ee.RequestUrl = ""
+			_ = ee.RequestUrl
 			return {{publicName}}{}, m
 		}
 		
@@ -1759,50 +1741,46 @@ func (g Generator) SelectByTableName(set edmxEntitySet, options string) string {
 
 		found, err := {{publicName}}Set(defaultFilter, values, headers, link)
 		if err != nil {
-			e := ExtractError(err)
+			ee := ExtractError(err)
 			message := UNEXPECTED_ERROR
-			s, ok := e.Message.(string)
+			s, ok := ee.Message.(string)
 			if ok {
 				message = s
 			}
 			m := ErrorMessage{
 				Attempted:  "{{publicName}}Set",
-				Code:       e.Code,
-				Details:    e.Details,
-				ErrorNo:    e.ErrorNo,
+				Code:       ee.Code,
+				Details:    ee.Details,
+				ErrorNo:    ee.ErrorNo,
 				Exit:       "{{exit01}}",
-				FileName:   e.FileName,
 				Function:   function,
-				InnerError: err,
-				LineNumber: e.LineNumber,
+				LineNumber: ee.LineNumber,
 				Message:    message,
-				Payload:    nil,
-				RequestUrl: e.RequestUrl,
-				User:       nil,
+				RequestUrl: ee.RequestUrl,
 			}
 			return []map[string]any{}, m
 		}
 		result, err := nullable.StructSetToMapSet(found, fields)
 		if err != nil {
-			e := ExtractError(err)
+			ee := ExtractError(err)
 			message := UNEXPECTED_ERROR
-			s, ok := e.Message.(string)
+			s, ok := ee.Message.(string)
 			if ok {
 				message = s
 			}
 			m := ErrorMessage{
 				Attempted:  "nullable.StructSetToMapSet",
-				Code:       e.Code,
-				Details:    e.Details,
-				ErrorNo:    e.ErrorNo,
+				Code:       ee.Code,
+				Details:    ee.Details,
+				ErrorNo:    ee.ErrorNo,
 				Exit:       "{{exit02}}",
-				FileName:   e.FileName,
+				FileName:   ee.FileName,
 				Function:   function,
 				InnerError: err,
-				LineNumber: e.LineNumber,
+				LineNumber: ee.LineNumber,
 				Message:    message,
 				Payload:    nil,
-				RequestUrl: e.RequestUrl,
+				RequestUrl: ee.RequestUrl,
 				User:       nil,
 			}
 			return []map[string]any{}, m
@@ -1853,25 +1831,25 @@ func (g Generator) UpdateCode(set edmxEntitySet) string {
 
 		result, err := dataset.Update({{type}}.ODataEditLink, *{{type}}, values)
 		if err != nil {
-			e := ExtractError(err)
+			ee := ExtractError(err)
 			message := UNEXPECTED_ERROR
-			s, ok := e.Message.(string)
+			s, ok := ee.Message.(string)
 			if ok {
 				message = s
 			}
 			m := ErrorMessage{
 				Attempted:  "dataset.Update({{type}}.ODataEditLink, *{{type}}, values)",
-				Code:       e.Code,
-				Details:    e.Details,
-				ErrorNo:    e.ErrorNo,
+				Code:       ee.Code,
+				Details:    ee.Details,
+				ErrorNo:    ee.ErrorNo,
 				Exit:       "{{exit01}}",
-				FileName:   e.FileName,
+				FileName:   ee.FileName,
 				Function:   function,
 				InnerError: err,
-				LineNumber: e.LineNumber,
+				LineNumber: ee.LineNumber,
 				Message:    message,
 				Payload:    nil,
-				RequestUrl: e.RequestUrl,
+				RequestUrl: ee.RequestUrl,
 				User:       nil,
 			}
 			return result, m
