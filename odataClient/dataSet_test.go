@@ -75,7 +75,7 @@ func TestOdataDataSet_Single(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	model, err := dataSet.Single("5", ODataQueryOptions{})
+	model, err := dataSet.Node("5", ODataQueryOptions{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, model.Id)
 	assert.Equal(t, "002", model.Number)
@@ -85,7 +85,7 @@ func TestOdataDataSet_Single(t *testing.T) {
 	assert.Equal(t, "Test description", model.Description.Data)
 }
 
-func TestOdataDataSet_List(t *testing.T) {
+func TestOdataDataSet_Set(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/People" {
 			writer.WriteHeader(404)
@@ -119,7 +119,7 @@ func TestOdataDataSet_List(t *testing.T) {
 	client := New(testServer.URL)
 	def := newTestModelDefinition(client)
 	dataSet := def.DataSet()
-	metaChan, modelsChan, errsChan := dataSet.List(ODataQueryOptions{})
+	metaChan, modelsChan, errsChan := dataSet.Set(ODataQueryOptions{})
 
 	var models []testModel
 	done := make(chan bool)

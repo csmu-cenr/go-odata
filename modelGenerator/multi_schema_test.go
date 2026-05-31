@@ -179,13 +179,14 @@ var multiSchemaEdmxSchema = `<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/o
 </edmx:DataServices>
 </edmx:Edmx>`
 
+var parsedXmlData edmxXmlData
 var parsedMultiSchemaEdmx edmxDataServices
 var multiSchemaEdmxParseError error
 var hasParsedMultiSchemaEdmx = false
 
 func getParsedMultiSchemaEdmx() (edmxDataServices, error) {
 	if !hasParsedMultiSchemaEdmx {
-		parsedMultiSchemaEdmx, multiSchemaEdmxParseError = parseEdmx([]byte(multiSchemaEdmxSchema))
+		parsedXmlData, parsedMultiSchemaEdmx, multiSchemaEdmxParseError = parseEdmx([]byte(multiSchemaEdmxSchema))
 		hasParsedMultiSchemaEdmx = true
 	}
 	return parsedMultiSchemaEdmx, multiSchemaEdmxParseError
@@ -206,12 +207,11 @@ func Test_Parse_multi_schema_edmx(t *testing.T) {
 	usernameProperty, ok := personEntityType.Properties["UserName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", usernameProperty.Type)
-
-	assert.Equal(t, "string", usernameProperty.goType(false, false, false))
+	assert.Equal(t, "string", usernameProperty.goType(true, false, false, false))
 	lastNameProperty, ok := personEntityType.Properties["LastName"]
 	assert.True(t, ok)
 	assert.Equal(t, "Edm.String", lastNameProperty.Type)
-	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType(false, false, false))
+	assert.Equal(t, "nullable.Nullable[string]", lastNameProperty.goType(true, false, false, false))
 
 	peopleEntitySet := edmx2.EntitySets["People"]
 	assert.Equal(t, "Trippin.Model.Person", peopleEntitySet.EntityType)

@@ -19,9 +19,8 @@ type ODataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] interface {
 	Get(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	Delete(id string) error
 	DeleteByFilter(options ODataQueryOptions) error
-	Single(id string, options ODataQueryOptions) (ModelT, error)
-	SingleValue(id string, options ODataQueryOptions) (ModelT, error)
-	List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
+	Node(id string, options ODataQueryOptions) (ModelT, error)
+	Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error)
 	Insert(model ModelT, tags []string) (ModelT, error)
 	Update(idOrEditLink string, model ModelT, values url.Values) (ModelT, error)
 	UpdateByFilter(model ModelT, tags []string, options ODataQueryOptions) error
@@ -122,13 +121,13 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 	options.ODataReadLink = values.Get(ODATAREADLINK)
 
 	filterValue := values.Get(FILTER)
-	if defaultFilter == NOTHING && filterValue != NOTHING {
+	if defaultFilter == "" && filterValue != "" {
 		options.Filter = filterValue
 	}
-	if defaultFilter != NOTHING && filterValue == NOTHING {
+	if defaultFilter != "" && filterValue == "" {
 		options.Filter = defaultFilter
 	}
-	if defaultFilter != NOTHING && filterValue != NOTHING {
+	if defaultFilter != "" && filterValue != "" {
 		if defaultFilter == filterValue {
 			options.Filter = defaultFilter
 		} else {
@@ -137,14 +136,14 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 	}
 
 	// Quote the filter if options.Quoted
-	if options.Filter != NOTHING && values.Has(QUOTE) {
+	if options.Filter != "" && values.Has(QUOTE) {
 		fields := []string{}
 		fields = append(fields, values[QUOTE]...)
 		options.Filter = quoteODataFields(options.Filter, fields)
 	}
 
 	format := values.Get((FORMAT))
-	if format == NOTHING {
+	if format == "" {
 		options.Format = "json"
 	} else {
 		options.Format = format
@@ -155,40 +154,40 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 
 func (options ODataQueryOptions) ToQueryString() string {
 	values := url.Values{}
-	if options.Select != NOTHING {
+	if options.Select != "" {
 		values.Add(SELECT, options.Select)
 	}
-	if options.Filter != NOTHING {
+	if options.Filter != "" {
 		values.Add(FILTER, options.Filter)
 	}
-	if options.Top != NOTHING {
+	if options.Top != "" {
 		values.Add(TOP, options.Top)
 	}
-	if options.Skip != NOTHING {
+	if options.Skip != "" {
 		values.Add(SKIP, options.Skip)
 	}
-	if options.Count != NOTHING {
+	if options.Count != "" {
 		values.Add(COUNT, options.Count)
 	}
-	if options.OrderBy != NOTHING {
+	if options.OrderBy != "" {
 		values.Add(ORDERBY, options.OrderBy)
 	}
-	if options.Format != NOTHING {
+	if options.Format != "" {
 		values.Add(FORMAT, options.Format)
 	}
-	if options.Expand != NOTHING {
+	if options.Expand != "" {
 		values.Add(EXPAND, options.Expand)
 	}
-	if options.ODataEditLink != NOTHING {
+	if options.ODataEditLink != "" {
 		values.Add(ODATAEDITLINK, options.ODataEditLink)
 	}
-	if options.ODataNavigationLink != NOTHING {
+	if options.ODataNavigationLink != "" {
 		values.Add(ODATANAVIGATIONLINK, options.ODataNavigationLink)
 	}
-	if options.ODataId != NOTHING {
+	if options.ODataId != "" {
 		values.Add(ODATAID, options.ODataId)
 	}
-	if options.ODataReadLink != NOTHING {
+	if options.ODataReadLink != "" {
 		values.Add(ODATAREADLINK, options.ODataReadLink)
 	}
 	result := values.Encode()
@@ -242,7 +241,7 @@ func (dataSet odataDataSet[ModelT, Def]) DeleteByFilter(options ODataQueryOption
 
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
+	if urlArgments != "" {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("DELETE", requestUrl, nil)
@@ -282,7 +281,7 @@ func (dataSet odataDataSet[ModelT, Def]) Get(id string, model ModelT, values url
 		Format:        values.Get(FORMAT),
 		ODataEditLink: values.Get(ODATAEDITLINK),
 	}
-	options = options.ApplyArguments(NOTHING, values)
+	options = options.ApplyArguments("", values)
 	arguments := options.ToQueryString()
 	tags := strings.Split(options.Select, COMMA)
 	if len(arguments) > 0 {
@@ -335,8 +334,8 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
 }
 
-// List data from the API
-func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
+// Set data from the API
+func (dataSet odataDataSet[ModelT, Def]) Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
 	meta := make(chan Result)
 	models := make(chan ModelT)
@@ -347,7 +346,7 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 		requestUrl := fmt.Sprintf("%s?%s",
 			dataSet.getCollectionUrl(),
 			options.ToQueryString())
-		for requestUrl != NOTHING {
+		for requestUrl != "" {
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
 				newRequestError := ErrorMessage{
@@ -465,15 +464,15 @@ func (dataSet odataDataSet[ModelT, Def]) Insert(model ModelT, fields []string) (
 	return executeHttpRequestPayload[ModelT](*dataSet.client, request, modelMap)
 }
 
-// Single model from the API by ID using the model json tags.
-func (dataSet odataDataSet[ModelT, Def]) Single(id string, options ODataQueryOptions) (ModelT, error) {
+// Node model from the API by ID using the model json tags.
+func (dataSet odataDataSet[ModelT, Def]) Node(id string, options ODataQueryOptions) (ModelT, error) {
 
 	functionName := `odataDataSet[ModelT, Def]) Single`
 	var responseModel ModelT
 
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
+	if urlArgments != "" {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
@@ -514,7 +513,7 @@ func (dataSet odataDataSet[ModelT, Def]) SingleValue(id string, options ODataQue
 
 	requestUrl := dataSet.getSingleUrl(id)
 	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
+	if urlArgments != "" {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 	request, err := http.NewRequest("GET", requestUrl, nil)
@@ -595,7 +594,7 @@ func (dataSet odataDataSet[ModelT, Def]) UpdateByFilter(model ModelT, fields []s
 
 	requestUrl := dataSet.getCollectionUrl()
 	urlArgments := options.ToQueryString()
-	if urlArgments != NOTHING {
+	if urlArgments != "" {
 		requestUrl = fmt.Sprintf("%s?%s", requestUrl, urlArgments)
 	}
 

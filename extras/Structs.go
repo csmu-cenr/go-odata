@@ -4,34 +4,33 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"unicode"
 )
 
-// findFieldByJSONTag finds a struct field by its JSON tag.
-func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructField, bool) {
-	for i := 0; i < dataType.NumField(); i++ {
-		field := dataType.Field(i)
-		tag := strings.Split(field.Tag.Get("json"), ",")[0]
-		if tag == jsonTag {
-			return field, true
-		}
-	}
-	return reflect.StructField{}, false
-}
+// // findFieldByJSONTag finds a struct field by its JSON tag.
+// func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructField, bool) {
+// 	for i := 0; i < dataType.NumField(); i++ {
+// 		field := dataType.Field(i)
+// 		tag := strings.Split(field.Tag.Get("json"), ",")[0]
+// 		if tag == jsonTag {
+// 			return field, true
+// 		}
+// 	}
+// 	return reflect.StructField{}, false
+// }
 
-// TODO Swap for official struct field is public function
-func isFirstLetterCapital(s string) bool {
-	// Check if the string is not empty
-	if s == "" {
-		return false
-	}
+// // TODO Swap for official struct field is public function
+// func isFirstLetterCapital(s string) bool {
+// 	// Check if the string is not empty
+// 	if s == "" {
+// 		return false
+// 	}
 
-	// Get the first rune (Unicode character) in the string
-	firstRune := []rune(s)[0]
+// 	// Get the first rune (Unicode character) in the string
+// 	firstRune := []rune(s)[0]
 
-	// Check if the first rune is uppercase
-	return unicode.IsUpper(firstRune)
-}
+// 	// Check if the first rune is uppercase
+// 	return unicode.IsUpper(firstRune)
+// }
 
 // StructListToInterface converts a list of structs to an interface
 func StructListToInterface(data any, fields []string) (interface{}, error) {

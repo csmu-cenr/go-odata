@@ -9,6 +9,7 @@ type ErrorMessage struct {
 	Code       string      `json:"code"`
 	Details    interface{} `json:"details"`
 	ErrorNo    int         `json:"errorNo,omitempty"`
+	Exit       string      `json:"exit,omitempty"`
 	Function   string      `json:"function,omitempty"`
 	InnerError interface{} `json:"err,omitempty"`
 	IPAddress  string      `json:"ipaddress,omitempty"`

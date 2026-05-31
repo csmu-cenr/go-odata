@@ -5,64 +5,125 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Uffe-Code/go-odata/modelgeneratoroutput"
 )
 
-type ModelGeneratorError struct {
-	Function  string
-	Attempted string
-	Detail    interface{}
+type ErrorMessage struct {
+	Attempted string `json:"attempted" xml:"attempted"`
+	Details   any    `json:"details" xml:"details"`
+	Function  string `json:"function" xml:"function"`
 }
 
-func (e ModelGeneratorError) Error() string {
-	bytes, _ := json.Marshal(e)
+func (e ErrorMessage) Error() string {
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		return err.Error()
+	}
 	return string(bytes)
 }
 
+type Fields struct {
+	Extras       []string          `json:"extras"`
+	Ignore       Ignore            `json:"ignore"`
+	Json         JsonTags          `json:"json"`
+	Primary      []Primary         `json:"primary"`
+	Creations    []string          `json:"creations"`
+	Modifcations []string          `json:"modifications"`
+	Public       bool              `json:"public"` // Change a_field__name__ to AFieldName
+	Pointers     bool              `json:"pointers"`
+	ReadOnlyTag  string            `json:"readOnlyTag"`
+	Swap         map[string]string `json:"swap"`
+}
+
+type Ignore struct {
+	StartsWith []string `json:"startsWith"`
+	Contains   []string `json:"contains"`
+	EndsWith   []string `json:"endsWith"`
+	Equals     []string `json:"equals"`
+}
+
+type JsonTags struct {
+	Tags      bool `json:"tags"`
+	OmitEmpty bool `json:"omitempty"`
+}
+
 type Generator struct {
-	ApiUrl  string `json:"apiUrl"`
-	Package struct {
-		CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
-		Datasets                 string `json:"datasets"`
-		Delete                   string `json:"delete"`
-		DeleteWhere              string `json:"deleteWhere"`
-		Directory                string `json:"directory"`
-		Extras                   string `json:"extras"`
-		FieldsConstants          string `json:"fieldsConstants"`
-		FieldsPackageName        string
-		Insert                   string `json:"insert"`
-		IgnoreCollections        bool   `json:"ignoreCollections"`
-		IgnoreNullableCheck      bool   `json:"ignoreNullableCheck"`
-		Maps                     string `json:"maps"`
-		Models                   string `json:"models"`
-		Save                     string `json:"save"`
-		Select                   string `json:"select"`
-		SelectByTableName        string `json:"selectByTableName"`
-		TablesConstants          string `json:"tablesConstants"`
-		TablesPackageName        string
-		Update                   string `json:"update"`
-		UpdateWhere              string `json:"updateWhere"`
-		WrapCollections          bool   `json:"wrapCollections"`
-	} `json:"package"`
-	Fields struct {
-		Public   bool              `json:"public"` // Change a_field__name__ to AFieldName
-		Pointers bool              `json:"pointers"`
-		Swap     map[string]string `json:"swap"`
-		Json     struct {
-			Tags      bool `json:"tags"`
-			OmitEmpty bool `json:"omitempty"`
-		} `json:"json"`
-		Extras []string `json:"extras"`
-		Ignore struct {
-			StartsWith []string `json:"startsWith"`
-			Contains   []string `json:"contains"`
-			EndsWith   []string `json:"endsWith"`
-			Equals     []string `json:"equals"`
-		} `json:"ignore"`
-	} `json:"fields"`
-	OutputMode modelgeneratoroutput.OutputMode `json:"outputMode"`
+	ApiUrl          string              `json:"apiUrl"`
+	Fields          Fields              `json:"fields"`
+	Meta            bool                `json:"Meta"`
+	Package         Package             `json:"package"`
+	ReadOnly        bool                `json:"readOnly"`
+	EnforceReadOnly map[string][]string `json:"enforceReadOnly"`
+	IgnoreReadOnly  map[string][]string `json:"ignoreReadOnly"`
+	Sets            []Set               `json:"sets"`
+	Verbose         bool                `json:"verbose"`
+	Debug           map[string]Debug    `json:"debug"`
+	DebugFunction   *DebugFunction
+	OutputMode      modelgeneratoroutput.OutputMode `json:"ouputMode"`
+}
+
+type Debug struct {
+	Functions map[string]DebugFunction `json:"functions"`
+	Verbose   bool                     `json:"verbose"`
+}
+
+type DebugFunction struct {
+	Variable string     `json:"variable"`
+	Ignore   bool       `json:"ignore"`
+	Fields   DebugField `json:"fields"`
+	Result   bool       `json:"result"`
+}
+
+type DebugField struct {
+	All   bool     `json:"all"`
+	Named []string `json:"named"`
+}
+
+type Set struct {
+	Name   string `json:"name"`
+	Ignore bool   `json:"ignore"`
+}
+
+type Modification struct {
+	Name    string `json:"name"`
+	SetData bool   `json:"set_data"`
+	Valid   bool   `json:"valid"`
+}
+
+type Primary struct {
+	Name     string `json:"name"`
+	Selected bool   `json:"selected"`
+	Valid    bool   `json:"valid"`
+}
+
+type Package struct {
+	CreateDirectoryIfMissing bool   `json:"createDirectoryIfMissing"`
+	Datasets                 string `json:"datasets"`
+	Delete                   string `json:"delete"`
+	DeleteWhere              string `json:"deleteWhere"`
+	Directory                string `json:"directory"`
+	Extras                   string `json:"extras"`
+	FieldsConstants          string `json:"fieldsConstants"`
+	FieldsPackageName        string `json:"fieldsPackageName"`
+	Insert                   string `json:"insert"`
+	IgnoreCollections        bool   `json:"ignoreCollections"`
+	IgnoreNullableCheck      bool   `json:"ignoreNullableCheck"`
+	Maps                     string `json:"maps"`
+	Models                   string `json:"models"`
+	Name                     string `json:"-"`
+	OdataAlias               string `json:"odataAlias"`
+	Save                     string `json:"save"`
+	SaveByTableName          string `json:"saveByTableName"`
+	Select                   string `json:"select"`
+	SelectByTableName        string `json:"selectByTableName"`
+	TablesConstants          string `json:"tablesConstants"`
+	TablesPackageName        string
+	Update                   string `json:"update"`
+	UpdateWhere              string `json:"updateWhere"`
+	WrapCollections          bool   `json:"wrapCollections"`
 }
 
 func New(path string) (Generator, error) {
@@ -72,19 +133,21 @@ func New(path string) (Generator, error) {
 
 	data, err := os.ReadFile(path) // just pass the file name
 	if err != nil {
-		e := ModelGeneratorError{
-			Attempted: fmt.Sprintf("Reading file: %s", path),
+		e := ErrorMessage{
+			Attempted: fmt.Sprintf(`os.ReadFile("%s")`, path),
 			Function:  function,
-			Detail:    err}
+			Details:   fmt.Sprintf(`Error: %+v`, err),
+		}
 		return generator, e
 	}
 
 	err = json.Unmarshal(data, &generator)
 	if err != nil {
-		e := ModelGeneratorError{
-			Attempted: fmt.Sprintf("Unmarshalling: %s", string(data)),
+		e := ErrorMessage{
+			Attempted: `json.Unmarshal(data, &generator)`,
 			Function:  function,
-			Detail:    err}
+			Details:   fmt.Sprintf(`Error: %+v`, err),
+		}
 		return generator, e
 	}
 
@@ -92,10 +155,41 @@ func New(path string) (Generator, error) {
 }
 
 func (g Generator) metadataUrl() string {
-	if strings.HasPrefix(g.ApiUrl, "http://") || strings.HasPrefix(g.ApiUrl, "https://") {
-		return strings.TrimRight(g.ApiUrl, "/") + "/$metadata"
+	return strings.TrimRight(g.ApiUrl, "/") + "/$metadata"
+}
+
+func (g *Generator) FieldConstants(dataService edmxDataServices) string {
+
+	result := fmt.Sprintf("package %s\n", g.Package.FieldsPackageName)
+
+	for _, schema := range dataService.Schemas {
+		result = fmt.Sprintf("%s\nconst (", result)
+		var names []string
+		for name := range schema.EntitySets {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.TrimLeft(strings.ToLower(names[i]), "_") < strings.TrimLeft(strings.ToLower(names[j]), "_")
+		})
+		for _, name := range names {
+
+			set := schema.EntitySets[name]
+			entityType := set.getEntityType()
+
+			result = fmt.Sprintf("%s\n\n\t// %s", result, strings.Trim(strings.ToUpper(entityType.Name), "_"))
+
+			propertyKeys := sortedCaseInsensitiveStringKeys(entityType.Properties)
+
+			for _, property := range propertyKeys {
+				if g.validPropertyName(property) {
+					result = fmt.Sprintf("%s\n\t%s__%s\t=\t`%s`", result, strings.Trim(strings.ToUpper(entityType.Name), "_"), strings.ToUpper(property), property)
+				}
+			}
+		}
+		result = fmt.Sprintf("%s\n\n)\n", result)
 	}
-	return g.ApiUrl
+	result = strings.Trim(result, "\n")
+	return result
 }
 
 func (g Generator) GenerateCode() error {
@@ -121,13 +215,21 @@ func (g Generator) GenerateCode() error {
 	}
 
 	link := g.metadataUrl()
-	edmx, err := fetchEdmx(link)
+	schema, edmx, err := fetchEdmx(link)
 	if err != nil {
 		return err
 	}
 
 	packageName := filepath.Base(dirPath)
-	code := g.generateCodeFromSchema(packageName, edmx)
+	g.Package.Name = packageName
+
+	if g.Meta {
+		xmlPath := filepath.Join(dirPath, fmt.Sprintf(`%s.xml`, packageName))
+		fmt.Printf("\n\nMetaXmlPath: %s\n\n", xmlPath)
+		g.SaveXMLSchema(xmlPath, schema)
+	}
+
+	code := g.CodeFromSchema(edmx)
 	for fileName, contents := range code {
 		filePath := fmt.Sprintf("%s%s%s", dirPath, string(filepath.Separator), fileName)
 		file, err := os.Create(filePath)
@@ -191,7 +293,7 @@ func (g Generator) GenerateCode() error {
 		}
 	}
 	g.Package.FieldsPackageName = filepath.Base(fieldsPath)
-	contents = g.generateFieldConstants(edmx)
+	contents = g.FieldConstants(edmx)
 	file, err = os.Create(g.Package.FieldsConstants)
 	if err != nil {
 		return err
