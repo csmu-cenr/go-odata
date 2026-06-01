@@ -191,30 +191,31 @@ func (g *Generator) generateCodeFromSchema(packageName string, dataService edmxD
 	`
 
 	var deleteCode strings.Builder
-	deleteCode.WriteString(fmt.Sprintf(`package %s
+	fmt.Fprintf(&deleteCode, `package %s
 	
 	import (
 		"github.com/Uffe-Code/go-odata/odataClient"
 	)
-	`, packageName))
+	`, packageName)
 
 	var updateCode strings.Builder
-	updateCode.WriteString(fmt.Sprintf(`package %s
+	fmt.Fprintf(&updateCode, `package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName))
+`, packageName)
 
 	var insertCode strings.Builder
-	insertCode.WriteString(fmt.Sprintf(`package %s
+	fmt.Fprintf(&insertCode, `package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
-`, packageName))
+`, packageName)
 
-	baseModelCode := fmt.Sprintf(`package %s
+	var baseModelCode strings.Builder
+	baseModelCode.WriteString(fmt.Sprintf(`package %s
 
 import (
 	"fmt"
@@ -241,7 +242,7 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 
 %s
 
-`, packageName, nilModel)
+`, packageName, nilModel))
 
 	selectByTableNameCode := fmt.Sprintf(`package %s
 
@@ -270,23 +271,23 @@ func (md modelDefinition[T]) DataSet() odataClient.ODataDataSet[T, odataClient.O
 	selectByTableNameCode = strings.ReplaceAll(selectByTableNameCode, "{{options}}", selectByTableNameOptions)
 
 	var saveCode strings.Builder
-	saveCode.WriteString(fmt.Sprintf(`package %s
+	fmt.Fprintf(&saveCode, `package %s
 
 
-`, packageName))
+`, packageName)
 
 	var datasets strings.Builder
-	datasets.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&datasets, `
 package %s
 	
 import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-	`, packageName))
+	`, packageName)
 
 	var selectCode strings.Builder
-	selectCode.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&selectCode, `
 package %s
 
 import (
@@ -296,10 +297,10 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName))
+`, packageName)
 
 	var mapCode strings.Builder
-	mapCode.WriteString(fmt.Sprintf(`package %s
+	fmt.Fprintf(&mapCode, `package %s
 
 import (
 	"fmt"
@@ -309,17 +310,17 @@ import (
 	"github.com/Uffe-Code/go-odata/odataClient"
 )
 
-`, packageName))
+`, packageName)
 
 	var singleFileMap map[string]string
 
 	for _, schema := range dataService.Schemas {
 		for _, enum := range schema.EnumTypes {
-			baseModelCode += "\n" + generateEnumStruct(enum) + "\n"
+			baseModelCode.WriteString("\n" + generateEnumStruct(enum) + "\n")
 		}
 
 		for _, complexType := range schema.ComplexTypes {
-			baseModelCode += "\n" + g.generateModelStruct(complexType) + "\n"
+			baseModelCode.WriteString("\n" + g.generateModelStruct(complexType) + "\n")
 		}
 
 		var names []string
@@ -395,8 +396,8 @@ import (
 				deleteCode.Reset()
 			}
 			if g.OutputMode.IsOmnibus() {
-				baseModelCode += "\n" + g.generateModelStruct(set.getEntityType()) + "\n"
-				baseModelCode += "\n" + generateModelDefinition(set) + "\n"
+				baseModelCode.WriteString("\n" + g.generateModelStruct(set.getEntityType()) + "\n")
+				baseModelCode.WriteString("\n" + generateModelDefinition(set) + "\n")
 			}
 			mapCode.WriteString("\n" + generateMapFunctionCode(set) + "\n")
 			selectByTableNameCode += "\n" + generateSelectByTableName(set, "client", selectByTableNameOptions) + "\n"
@@ -439,7 +440,7 @@ import (
 	}
 	if g.OutputMode.IsOmnibus() {
 		if g.Package.Models != NOTHING {
-			code[g.Package.Models] = baseModelCode
+			code[g.Package.Models] = baseModelCode.String()
 		}
 		if g.Package.Select != NOTHING {
 			code[g.Package.Select] = selectCode.String()
@@ -463,7 +464,6 @@ import (
 			code[g.Package.Delete] = deleteCode.String()
 		}
 	}
-
 	if g.OutputMode.IsSingle() {
 		for name, contents := range singleFileMap {
 			code[fmt.Sprintf(`%s.go`, name)] = contents
