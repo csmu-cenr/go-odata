@@ -334,92 +334,95 @@ func (dataSet odataDataSet[ModelT, Def]) getSingleUrl(modelId string) string {
 	return fmt.Sprintf("%s(%s)", dataSet.client.baseUrl+dataSet.modelDefinition.Url(), modelId)
 }
 
-// Set data from the API
 func (dataSet odataDataSet[ModelT, Def]) Set(options ODataQueryOptions) (<-chan Result, <-chan ModelT, <-chan error) {
 
-	meta := make(chan Result)
+	meta := make(chan Result, 1)
 	models := make(chan ModelT)
-	errs := make(chan error)
-
+	errs := make(chan error, 1)
 	go func() {
-
-		requestUrl := fmt.Sprintf("%s?%s",
+		defer close(meta)
+		defer close(models)
+		defer close(errs)
+		requestUrl := fmt.Sprintf(
+			"%s?%s",
 			dataSet.getCollectionUrl(),
-			options.ToQueryString())
+			options.ToQueryString(),
+		)
+		firstPage := true
 		for requestUrl != "" {
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
-				newRequestError := ErrorMessage{
-					Function:   "odataClient.List: Anonymous",
-					Attempted:  `http.NewRequest GET`,
+				errs <- ErrorMessage{
+					Function:   "odataClient.Set",
+					Attempted:  "http.NewRequest GET",
 					RequestUrl: requestUrl,
 					Payload:    options,
 					InnerError: err,
-					ErrorNo:    http.StatusInternalServerError}
-				errs <- newRequestError
-				close(meta)
-				close(models)
-				close(errs)
-				return
-			}
-			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
-			if err != nil {
-				executeHttpRequestError := ErrorMessage{
 					ErrorNo:    http.StatusInternalServerError,
-					Function:   "odataClient.List: Anonymous",
-					Attempted:  "executeHttpRequest",
-					RequestUrl: requestUrl,
-					Options:    &options,
-					InnerError: err}
-				// get the internal error number
-				switch e := err.(type) {
-				case *ErrorMessage:
-					executeHttpRequestError.Body = e.Body
-					executeHttpRequestError.Code = e.Code
-					executeHttpRequestError.Details = e.Details
-					executeHttpRequestError.ErrorNo = e.ErrorNo
-					executeHttpRequestError.Message = e.Message
-					executeHttpRequestError.RequestUrl = e.RequestUrl
-				case ErrorMessage:
-					executeHttpRequestError.Body = e.Body
-					executeHttpRequestError.Code = e.Code
-					executeHttpRequestError.Details = e.Details
-					executeHttpRequestError.ErrorNo = e.ErrorNo
-					executeHttpRequestError.Message = e.Message
-					executeHttpRequestError.RequestUrl = e.RequestUrl
-				default:
 				}
-
-				errs <- executeHttpRequestError
-				close(meta)
-				close(models)
-				close(errs)
 				return
 			}
-			close(errs) // defer(errs) was blocking.
-
-			result := Result{}
-			result.Context = responseData.Context
-			if options.Count == "true" {
-				result.Count = responseData.Count
+			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](
+				*dataSet.client,
+				request,
+			)
+			if err != nil {
+				errs <- wrapODataError("odataClient.Set", requestUrl, options, err)
+				return
 			}
-			result.Model = dataSet.modelDefinition.Url()
-			result.NextLink = responseData.NextLink
-			meta <- result
-			close(meta)
+			if firstPage {
+				result := Result{
+					Context:  responseData.Context,
+					Model:    dataSet.modelDefinition.Url(),
+					NextLink: responseData.NextLink,
+				}
+				if options.Count == "true" {
+					result.Count = responseData.Count
+				}
+				meta <- result
+				firstPage = false
+			}
 			for _, model := range responseData.Value {
 				models <- model
 			}
-
-			defer close(models)
-			if len(responseData.Value) < dataSet.client.defaultPageSize {
+			if responseData.NextLink == "" {
 				return
 			}
 			requestUrl = responseData.NextLink
 		}
 	}()
-
 	return meta, models, errs
+
+}
+
+func wrapODataError(function string, requestUrl string, options ODataQueryOptions, err error) ErrorMessage {
+
+	result := ErrorMessage{
+		ErrorNo:    http.StatusInternalServerError,
+		Function:   function,
+		Attempted:  "executeHttpRequest",
+		RequestUrl: requestUrl,
+		Options:    &options,
+		InnerError: err,
+	}
+	switch e := err.(type) {
+	case *ErrorMessage:
+		result.Body = e.Body
+		result.Code = e.Code
+		result.Details = e.Details
+		result.ErrorNo = e.ErrorNo
+		result.Message = e.Message
+		result.RequestUrl = e.RequestUrl
+	case ErrorMessage:
+		result.Body = e.Body
+		result.Code = e.Code
+		result.Details = e.Details
+		result.ErrorNo = e.ErrorNo
+		result.Message = e.Message
+		result.RequestUrl = e.RequestUrl
+	}
+	return result
+
 }
 
 // Insert a model to the API
