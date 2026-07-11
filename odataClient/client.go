@@ -162,7 +162,7 @@ func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 }
 
 // executeHttpRequest
-func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
+func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error) {
 
 	function := `executeHttpRequest`
 	link := getFullURL(req)
