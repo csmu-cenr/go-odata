@@ -11,6 +11,7 @@ const (
 	DOUBLE_SINGLE_QUOTE = `''`
 	ESCAPE              = `escape`
 	EXPAND              = `$expand`
+	FALSE               = `false`
 	FILTER              = `$filter`
 	FORMAT              = `$format`
 	LEFT_BRACKET        = `(`
