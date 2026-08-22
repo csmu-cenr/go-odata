@@ -83,8 +83,8 @@ func TestOdataDataSet_Single(t *testing.T) {
 	assert.Equal(t, 5, model.Id)
 	assert.Equal(t, "002", model.Number)
 	assert.Equal(t, "Donald Duck", model.Name)
-	assert.False(t, model.ParentId.IsValid)
-	assert.True(t, model.Description.IsValid)
+	assert.False(t, model.ParentId.IsValid())
+	assert.True(t, model.Description.IsValid())
 	assert.Equal(t, "Test description", model.Description.Data)
 }
 
@@ -133,8 +133,8 @@ func TestOdataDataSet_List(t *testing.T) {
 			assert.Equal(t, 5, model.Id)
 			assert.Equal(t, "002", model.Number)
 		}
-		assert.False(t, model.ParentId.IsValid)
-		assert.True(t, model.Description.IsValid)
+		assert.False(t, model.ParentId.IsValid())
+		assert.True(t, model.Description.IsValid())
 		assert.Equal(t, "Test description", model.Description.Data)
 		i++
 	}
@@ -173,7 +173,7 @@ func Test_Insert(t *testing.T) {
 	res, err := dataSet.Insert(model, []string{})
 	assert.NoError(t, err)
 	assert.Equal(t, 0, res.Id)
-	assert.False(t, res.ParentId.IsValid)
+	assert.False(t, res.ParentId.IsValid())
 	assert.Equal(t, "FooBar", res.Name)
 }
 
@@ -210,6 +210,6 @@ func Test_Update(t *testing.T) {
 	res, err := dataSet.Update("5", model, []string{})
 	assert.NoError(t, err)
 	assert.Equal(t, 5, res.Id)
-	assert.False(t, res.ParentId.IsValid)
+	assert.False(t, res.ParentId.IsValid())
 	assert.Equal(t, "FooBar", res.Name)
 }
