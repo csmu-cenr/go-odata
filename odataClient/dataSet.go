@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"unicode"
 )
 
 type odataDataSet[ModelT any, Def ODataModelDefinition[ModelT]] struct {
@@ -345,20 +344,6 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	return meta, models, errs
 }
 
-// TODO Swap for official struct field is public function
-func isFirstLetterCapital(s string) bool {
-	// Check if the string is not empty
-	if s == NOTHING {
-		return false
-	}
-
-	// Get the first rune (Unicode character) in the string
-	firstRune := []rune(s)[0]
-
-	// Check if the first rune is uppercase
-	return unicode.IsUpper(firstRune)
-}
-
 func StructToAny(data interface{}, fields []string) (interface{}, error) {
 	result, err := StructToMap(data, fields)
 	if err != nil {
@@ -367,8 +352,8 @@ func StructToAny(data interface{}, fields []string) (interface{}, error) {
 	return result, nil
 }
 
-func StructToMap(data interface{}, fields []string) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+func StructToMap(data any, fields []string) (map[string]any, error) {
+	result := make(map[string]any)
 
 	// Get the type and value of the input data
 	dataType := reflect.TypeOf(data)
@@ -383,7 +368,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 	if len(fields) == 0 {
 		for i := 0; i < dataType.NumField(); i++ {
 			field := dataType.Field(i)
-			if isFirstLetterCapital(field.Name) {
+			if field.PkgPath == "" {
 				fieldValue := dataValue.Field(i).Interface()
 				result[field.Name] = fieldValue
 			}
@@ -393,6 +378,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 
 	// Iterate over the fields to be selected
 	for _, fieldName := range fields {
+		fieldName = strings.ReplaceAll(fieldName, "\"", "")
 		// Find the field by JSON tag
 		field, found := findFieldByJSONTag(dataType, fieldName)
 		if !found {
@@ -401,7 +387,7 @@ func StructToMap(data interface{}, fields []string) (map[string]interface{}, err
 		}
 
 		// field names must be exported to access the value
-		if isFirstLetterCapital(field.Name) {
+		if field.PkgPath == "" {
 			// Get the field value
 			fieldValue := dataValue.FieldByName(field.Name).Interface()
 
