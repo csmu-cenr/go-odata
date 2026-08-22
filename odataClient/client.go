@@ -16,20 +16,24 @@ type oDataClient struct {
 	defaultPageSize int
 }
 
-type ErrorMessage struct {
-	Message    string      `json:"message"`
-	Function   string      `json:"function,omitempty"`
-	Attempted  string      `json:"attempted,omitempty"`
-	Body       interface{} `json:"body"`
-	Code       int         `json:"code,omitempty"`
-	Details    interface{} `json:"detail,omitempty"`
-	RequestUrl string      `json:"requestUrl,omitempty"`
+type Error struct {
+	Attempted  string   `json:"attempted,omitempty"`
+	Body       any      `json:"body"`
+	Code       string   `json:"code,omitempty"`
+	Details    any      `json:"detail,omitempty"`
+	ErrorNo    int      `json:"errorNo,omitempty"`
+	Exit       string   `json:"exit,omitempty"`
+	Function   string   `json:"function,omitempty"`
+	InnerErr   error    `json:"innerErr"`
+	Message    string   `json:"message"`
+	RequestUrl string   `json:"requestUrl,omitempty"`
+	Stack      []string `json:"stack"`
 }
 
-func (ts ErrorMessage) Error() string {
-	bytes, err := json.MarshalIndent(ts, "", "  ")
+func (e Error) Error() string {
+	bytes, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Function: %s: Attempted: %s Details: %+v Body: %s", ts.Function, ts.Attempted, ts.Details, ts.Body)
+		return fmt.Sprintf("Function: %s: Attempted: %s Details: %+v Body: %s", e.Function, e.Attempted, e.Details, e.Body)
 	}
 	return string(bytes)
 }
@@ -122,73 +126,150 @@ func (client *oDataClient) ODataClient() ODataClient {
 	return client
 }
 
+func extract(err any) Error {
+	in, e := json.Marshal(err)
+	if e != nil {
+		status := http.StatusBadRequest
+		return Error{
+			Details:  fmt.Sprintf(`Unable to extract %s`, err),
+			ErrorNo:  status,
+			Exit:     "f26a1d967175",
+			InnerErr: e,
+			Message:  http.StatusText(status),
+		}
+	}
+	out := Error{}
+	json.Unmarshal(in, &out)
+	return out
+}
+
 func (client oDataClient) mapHeadersToRequest(req *http.Request) {
 	for key, value := range client.headers {
 		req.Header.Set(key, value)
 	}
 }
 
-func executeHttpRequest[T interface{}](client oDataClient, req *http.Request) (T, error) {
+func executeHttpRequest[T any](client oDataClient, req *http.Request) (T, error) {
+
+	function := `executeHttpRequest`
+	stack := []string{function}
+	link := getFullURL(req)
 
 	client.mapHeadersToRequest(req)
 	response, err := client.httpClient.Do(req)
 	var responseData T
 	if err != nil {
-		httpClientDoError := ErrorMessage{
-			Function:  "executeHttpRequest",
-			Attempted: "response, err := client.httpClient.Do(req)",
-			Details:   err}
+		httpClientDoError := Error{
+			Attempted:  "client.httpClient.Do(req)",
+			ErrorNo:    response.StatusCode,
+			Exit:       "5e1cfbe5d9a3",
+			Function:   function,
+			InnerErr:   err,
+			RequestUrl: link,
+			Stack:      stack,
+		}
 		return responseData, httpClientDoError
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		ioReadAllError := ErrorMessage{
-			Function:  "executeHttpRequest",
-			Attempted: "body, err := io.ReadAll(response.Body)",
-			Details:   err}
-		return responseData, ioReadAllError
+		message := Error{
+			Attempted:  "body, err := io.ReadAll(response.Body)",
+			ErrorNo:    response.StatusCode,
+			Exit:       "f48ce3e25b2f",
+			Function:   function,
+			InnerErr:   err,
+			RequestUrl: link,
+			Stack:      stack,
+		}
+		return responseData, message
 	}
-	if response.StatusCode >= 400 {
-		executeHttpRequestError := ErrorMessage{Function: "executeHttpRequest",
-			Attempted: "response, err := client.httpClient.Do(req)",
-			Code:      response.StatusCode}
-		var data map[string]interface{}
+	if response.StatusCode >= http.StatusBadRequest {
+		m := Error{
+			Attempted:  "response, err := client.httpClient.Do(req)",
+			ErrorNo:    response.StatusCode,
+			Exit:       "b3ef366b82ee",
+			Function:   function,
+			RequestUrl: link,
+			Stack:      stack,
+		}
+		var data map[string]any
 		err := json.Unmarshal(body, &data)
 		if err != nil {
-			executeHttpRequestError.Details = string(body)
-			return responseData, executeHttpRequestError
-		} else {
-			executeHttpRequestError.Details = data
+			m.Body = string(body)
+			return responseData, m
 		}
-		return responseData, executeHttpRequestError
+		// FileMaker Error Struct
+		errVal, ok := data["error"]
+		if ok {
+			if errMap, ok := errVal.(map[string]interface{}); ok {
+				code, _ := errMap["code"].(string)
+				message, _ := errMap["message"].(string)
+				m.Code = code
+				m.Message = message
+			}
+		} else {
+			m.Details = data
+		}
+		return responseData, m
 	}
-	if response.StatusCode == 204 {
-		// No Data - but no error
+	if response.StatusCode == http.StatusNoContent {
 		return responseData, nil
 	}
-	colonSpaceQuestion := []byte(`": ?`)
-	colonNull := []byte(`": null`)
-	sanitised := bytes.ReplaceAll(body, colonSpaceQuestion, colonNull)
-	// if err != nil {
-	// 	modelError := ErrorMessage{
-	// 		Message:   err.Error(),
-	// 		Function:  "odataClient.executeHttpRequest",
-	// 		Attempted: "json.MarshalIndent",
-	// 		Body:      string(sanitised),
-	// 		Details:   err}
-	// 	return responseData, modelError
-	// }
-	err = json.Unmarshal(sanitised, &responseData)
+
+	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		modelError := ErrorMessage{
-			Message:   err.Error(),
-			Function:  "odataClient.executeHttpRequest",
-			Attempted: "json.Unmarshal(body, &responseData)",
-			Body:      string(sanitised),
-			Details:   err}
-		return responseData, modelError
+
+		// Might be dirty data.
+		sanitised := body
+		// Had some dirty data being returned by an odata source where : null was being returned as : ?
+		questionMark := []byte(`": ?`)
+		null := []byte(`": null`)
+		sanitised = bytes.ReplaceAll(sanitised, questionMark, null)
+		// Had some dirty data being returned by an odata source where -0.5 was being returned as -.5 - which is invalid for a number
+		minus := []byte(`": -.`)
+		zero := []byte(`": -0.`)
+		sanitised = bytes.ReplaceAll(sanitised, minus, zero)
+
+		err = json.Unmarshal(sanitised, &responseData)
+		if err != nil {
+			message := Error{
+				Attempted: "err = json.Unmarshal(sanitised, &responseData)",
+				Body:      string(sanitised),
+				ErrorNo:   http.StatusInternalServerError,
+				Exit:      "1ef3b68505bc",
+				Function:  function,
+				InnerErr:  err,
+				Message:   fmt.Sprintf(`%v`, err),
+				Stack:     stack,
+			}
+			return responseData, message
+		}
 	}
 
 	return responseData, nil
+}
+
+// Function to get the full URL from the http.Request
+func getFullURL(req *http.Request) string {
+
+	scheme := req.URL.Scheme
+	host := req.URL.Host
+	path := req.URL.Path
+	port := req.URL.Port()
+	switch port {
+	case "443", "80", "":
+		port = NOTHING
+	default:
+		port = `:` + port
+	}
+	query := req.URL.RawQuery
+	if len(query) > 0 {
+		query = `?` + query
+	}
+
+	// Construct the full URL
+	result := fmt.Sprintf("%s://%s%s%s%s", scheme, host, port, path, query)
+
+	return result
 }

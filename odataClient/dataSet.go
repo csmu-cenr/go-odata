@@ -39,10 +39,15 @@ func NewDataSet[ModelT any, Def ODataModelDefinition[ModelT]](client ODataClient
 
 func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url.Values) ODataQueryOptions {
 
+	dollar := `$`
+
 	// Determine if the field names should be quoted
-	if values.Has(QUOTED) {
+	switch {
+	case values.Has(QUOTED):
 		options.Quoted = values.Get(QUOTED) == TRUE
-	} else {
+	case values.Has(dollar + QUOTED):
+		options.Quoted = values.Get(dollar+QUOTED) == TRUE
+	default:
 		options.Quoted = true
 	}
 
@@ -83,6 +88,12 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 	// Remove quotes from fields that the odata provider rejects.
 	if values.Has(DEQUOTE) {
 		dequote := values[DEQUOTE]
+		for _, v := range dequote {
+			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
+		}
+	}
+	if values.Has(dollar + DEQUOTE) {
+		dequote := values[dollar+DEQUOTE]
 		for _, v := range dequote {
 			options.Select = strings.ReplaceAll(options.Select, fmt.Sprintf(`"%s"`, v), v)
 		}
@@ -287,18 +298,30 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 	errs := make(chan error)
 
 	go func() {
-
+		function := "odataClient.List"
+		stack := []string{function}
 		requestUrl := fmt.Sprintf("%s?%s",
 			dataSet.getCollectionUrl(),
 			options.ToQueryString())
-		for requestUrl != NOTHING {
+		for requestUrl != "" {
 			request, err := http.NewRequest("GET", requestUrl, nil)
 			if err != nil {
-				newRequestError := ErrorMessage{
-					Function:   "odataClient.List: Anonymous",
-					Attempted:  `http.NewRequest GET`,
+				e := extract(err)
+				message := e.Message
+				if message == "" {
+					message = http.StatusText(e.ErrorNo)
+				}
+				newRequestError := Error{
+					Attempted: `http.NewRequest GET`,
+					Details:   e.Details,
+					ErrorNo:   e.ErrorNo,
+					Exit:      "011c30ea873f",
+					Function:  function,
+					// InnerErr:   err,
+					Message:    message,
 					RequestUrl: requestUrl,
-					Details:    err}
+					Stack:      append(stack, e.Stack...),
+				}
 				errs <- newRequestError
 				close(meta)
 				close(models)
@@ -307,11 +330,19 @@ func (dataSet odataDataSet[ModelT, Def]) List(options ODataQueryOptions) (<-chan
 			}
 			responseData, err := executeHttpRequest[apiMultiResponse[ModelT]](*dataSet.client, request)
 			if err != nil {
-				executeHttpRequestError := ErrorMessage{
-					Function:   "odataClient.List: Anonymous",
-					Attempted:  "executeHttpRequest",
+				e := extract(err)
+				executeHttpRequestError := Error{
+					Attempted: "executeHttpRequest",
+					Code:      e.Code,
+					Details:   e.Details,
+					ErrorNo:   e.ErrorNo,
+					Exit:      "c4e7372bf4c8",
+					Function:  "odataClient.List: Anonymous",
+					// InnerErr:   err,
+					Message:    e.Message,
 					RequestUrl: requestUrl,
-					Details:    err}
+					Stack:      append(stack, e.Stack...),
+				}
 				errs <- executeHttpRequestError
 				close(meta)
 				close(models)

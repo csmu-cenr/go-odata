@@ -60,16 +60,12 @@ func TestOdataDataSet_Single(t *testing.T) {
 			return
 		}
 		writer.WriteHeader(200)
-		data, _ := json.Marshal(struct {
-			Value testModel `json:"value"`
-		}{
-			Value: testModel{
-				Id:          5,
-				Number:      "002",
-				Name:        "Donald Duck",
-				ParentId:    nullable.Null[int](),
-				Description: nullable.Value("Test description"),
-			},
+		data, _ := json.Marshal(testModel{
+			Id:          5,
+			Number:      "002",
+			Name:        "Donald Duck",
+			ParentId:    nullable.Null[int](),
+			Description: nullable.Value("Test description"),
 		})
 		_, _ = writer.Write(data)
 	}))
