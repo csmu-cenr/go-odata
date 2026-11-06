@@ -14,6 +14,7 @@ const (
 	FALSE               = `false`
 	FILTER              = `$filter`
 	FORMAT              = `$format`
+	ID                  = `id`
 	LEFT_BRACKET        = `(`
 	NEXTLINK            = `$nextLink`
 	METADATA            = `$metadata`
@@ -26,6 +27,7 @@ const (
 	NOTHING             = ``
 	REF                 = `$ref`
 	RIGHT_BRACKET       = `)`
+	SPACE               = ` `
 	SELECT              = `$select`
 	SINGLE_DOUBLE_QUOTE = `"`
 	SKIP                = `$skip`

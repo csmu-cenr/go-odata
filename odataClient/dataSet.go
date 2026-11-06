@@ -99,6 +99,48 @@ func (options ODataQueryOptions) ApplyArguments(defaultFilter string, values url
 		}
 	}
 
+	if values.Has(ORDERBY) {
+		// Make sure id is quoted.
+		// Make sure fields are properly quoted if required
+		fields := strings.Split(values.Get(ORDERBY), COMMA)
+		for i, f := range fields {
+
+			// Trim any leading or trailing whitespace from the field
+			f = strings.TrimSpace(f)
+			f = strings.ReplaceAll(f, SPACE+SPACE, SPACE)
+
+			// Handle asc|desc suffixes
+			if strings.Contains(f, SPACE) {
+				fo := strings.Split(f, SPACE)
+				if options.Quoted {
+					f = quote(fo[0])
+				} else {
+					f = fo[0]
+				}
+				f = f + SPACE + fo[1]
+				fields[i] = f
+				continue
+			}
+
+			// Quote the ID field if present
+			if strings.EqualFold(f, ID) {
+				f = quote(f)
+				fields[i] = f
+				continue
+			}
+
+			// Quote the field if required
+			if options.Quoted && !isQuoted(f) {
+				f = quote(f)
+				fields[i] = f
+				continue
+			}
+
+			fields[i] = f
+		}
+		options.OrderBy = strings.Join(fields, COMMA)
+	}
+
 	options.Count = values.Get(COUNT)
 	options.Top = values.Get(TOP)
 	options.Skip = values.Get(SKIP)
@@ -442,6 +484,19 @@ func findFieldByJSONTag(dataType reflect.Type, jsonTag string) (reflect.StructFi
 		}
 	}
 	return reflect.StructField{}, false
+}
+
+// isQuoted checks if a string is enclosed in double quotes.
+func isQuoted(s string) bool {
+	return strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")
+}
+
+// quote adds double quotes around a string if it is not already quoted.
+func quote(s string) string {
+	if !isQuoted(s) {
+		return `"` + s + `"`
+	}
+	return s
 }
 
 // StructListToInterface converts a list of structs to an interface
